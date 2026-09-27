@@ -1,5 +1,27 @@
 # Changelog
 
+## 3.0.2-beta — AI removed: subtitle-only pipeline
+
+All Puter.js AI is gone (translation + audio transcription), and the API token
+config with it — the account was rate-limited and is no longer useful.
+
+- **Removed:** `translateSRTWithPuter`, `transcribeAudioWithPuter`, the Puter
+  init/auth block, `PUTER_AUTH_TOKEN` handling, the `@heyputer/puter.js`
+  dependency, and the XHR-shim polyfill. Nothing calls any AI service now.
+- **Pipeline** is now: existing output → skip · local Arabic → brand ·
+  OpenSubtitles Arabic (hash→title) → brand · English found → `skip-english` ·
+  nothing → `no-subtitle`. Videos without a ready-made Arabic subtitle are left
+  untouched with the reason recorded in `logs/decisions.jsonl`.
+- **Branding** updated (as requested): watermark is now
+  `[ ترجمت الأداة ساب أرابيفاي ]` (the "— مدعوم من Puter.js" clause is gone),
+  and the website (`docs/index.html`) no longer claims AI features.
+- `identifyMovie` strips both `\` and `/` separators so Windows-style paths
+  parse correctly on Linux (caught by CI).
+- package renamed `subarabify-puter` → `subarabify`; app `versionCode` 27,
+  `versionName "3.0.2-beta"`.
+- Tests updated to the no-AI behavior (English/no-subtitle paths assert clean
+  skips).
+
 ## 3.0.1-beta — subtitle-first pipeline, stage 1: identify + fetch
 
 First slice of the genre-aware rebuild: stop reaching for the microphone when a

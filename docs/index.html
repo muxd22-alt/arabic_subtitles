@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ساب أرابيفاي | محرك الترجمة التلقائي</title>
-  <meta name="description" content="عامل خلفية يقوم بترجمة أفلامك ومسلسلاتك تلقائياً إلى العربية">
+  <title>ساب أرابيفاي | بحث وتجهيز الترجمة العربية</title>
+  <meta name="description" content="عامل خلفية يبحث عن الترجمة العربية الجاهزة لفلامك ومسلسلاتك ويجهّزها تلقائياً">
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -33,8 +33,8 @@
   <header class="hero">
     <div class="hero-overlay"></div>
     <div class="hero-content">
-      <h1>ترجمة غير محدودة. بدون أي مجهود.</h1>
-      <p>أفضل أداة خلفية تقوم بمهام الترجمة العربية الشاقة لجميع أفلامك ومسلسلاتك تلقائياً وبدون اتصال بالإنترنت.</p>
+      <h1>ترجمة عربية جاهزة. بدون أي مجهود.</h1>
+      <p>أداة خلفية تبحث عن الترجمة العربية الجاهزة لجميع أفلامك ومسلسلاتك — أولاً بجانب الملف ثم عبر OpenSubtitles — وتجهّزها تلقائياً.</p>
       <div class="hero-actions" style="display: flex; gap: 20px; justify-content: center; direction: rtl;">
         <a href="#how-it-works" class="btn-primary btn-large">اكتشف كيف يعمل</a>
         <a href="https://github.com/muxd22-alt/SubArabify/releases/latest" class="btn-primary btn-large" style="background-color: #4CAF50;">تحميل التطبيق المرافق</a>
@@ -49,7 +49,7 @@
     <section id="how-it-works" class="feature alternate">
       <div class="feature-text">
         <h2>غير مرئي، لا يمكن إيقافه.</h2>
-        <p>يعمل ساب أرابيفاي كعقدة خلفية صامتة، يعمل بسلاسة دون فوضى في واجهة المستخدم. وجهه إلى مجلد الوسائط الخاص بك، وسيقوم بالترجمة بصمت بينما تشاهد.</p>
+        <p>يعمل ساب أرابيفاي كعقدة خلفية صامتة، يعمل بسلاسة دون فوضى في واجهة المستخدم. وجهه إلى مجلد الوسائط الخاص بك، وسيبحث عن الترجمة ويجهّزها بصمت بينما تشاهد.</p>
       </div>
       <div class="feature-visual">
         <div class="status-card glow-red">
@@ -65,21 +65,21 @@
     
     <div class="divider"></div>
 
-    <!-- Section 2: Audio & SRT Extraction -->
+    <!-- Section 2: Ready-made subtitle lookup -->
     <section class="feature">
       <div class="feature-text">
-        <h2>لا يوجد ملف ترجمة؟ لا مشكلة.</h2>
-        <p>عندما يتم تضمين الترجمة الإنجليزية كملف داخل الفيلم، يقوم التطبيق بترجمتها فوراً بالذكاء الاصطناعي السريع. لكن إذا لم يمتلك الفيلم أي ترجمة، يستخدم أداة <strong>FFmpeg</strong> لاستخراج الصوت الأصلي وبناء ترجمة عربية متزامنة بالكامل من الصفر.</p>
+        <h2>لا توجد ترجمة عربية؟ سيجدها لك.</h2>
+        <p>يقرأ ساب أرابيفاي اسم الملف ليعرف الفيلم وسنته، ثم يبحث أولاً عن ترجمة عربية جاهزة بجانب الفيلم، ثم في <strong>OpenSubtitles</strong> عبر بصمة الملف الفريدة وبعدها بالاسم، ويحفظ النتيجة باسم <span style="direction: ltr; display: inline-block;">Movie.SubArabify.ar.srt</span> مع علامة الأداة. بدون ذكاء اصطناعي وبدون استخراج صوت.</p>
       </div>
       <div class="feature-visual">
         <div class="code-window">
           <div class="window-header">
             <span></span><span></span><span></span>
           </div>
-          <pre style="direction: ltr; text-align: left;"><code>[FFmpeg] Parsing audio track
-[Puter.js] Keyless translation initiated
-[SubArabify] Bridling timed text...
-[Success] Insterstellar.ar.srt saved.</code></pre>
+          <pre style="direction: ltr; text-align: left;"><code>[Finder] Identified: "Interstellar" (2014)
+[Finder] Found (OpenSubtitles, moviehash)
+[Success] Arabic subtitle branded.
+[Success] Interstellar.SubArabify.ar.srt saved.</code></pre>
         </div>
       </div>
     </section>
@@ -124,7 +124,7 @@
   <div class="divider"></div>
 
   <footer>
-    <p>مبني بواسطة منصة Puter.js — بدون سيرفرات إضافية. أداء بنسبة ١٠٠%.</p>
+    <p>بدون سيرفرات إضافية — كل شيء يعمل على جهازك. أداء بنسبة ١٠٠%.</p>
     <a href="https://github.com/muxd22-alt/SubArabify">تشغيل الأداة برمجياً</a>
   </footer>
 

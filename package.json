@@ -1,14 +1,13 @@
 {
-  "name": "subarabify-puter",
-  "version": "3.0.1-beta",
-  "description": "SubArabify Puter.js Edition",
+  "name": "subarabify",
+  "version": "3.0.2-beta",
+  "description": "SubArabify — subtitle-first Arabic branding pipeline (no AI)",
   "main": "subarabify.js",
   "scripts": {
     "start": "node subarabify.js",
     "test": "node --test"
   },
   "dependencies": {
-    "@heyputer/puter.js": "^2.6.3",
     "chokidar": "^3.6.0",
     "parse-torrent-title": "^3.0.1"
   },

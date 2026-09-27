@@ -6,8 +6,6 @@ const os = require('os');
 const {
     parseSRT,
     buildSRT,
-    withRetry,
-    extractResponseText,
     timeToMs,
     msToTime,
     enqueueFile,
@@ -28,7 +26,7 @@ test('parseSRT and buildSRT', () => {
     assert.equal(cues[1].text, 'Second cue text');
 
     const built = buildSRT(cues);
-    assert.ok(built.includes('[ ترجمت الأداة ساب أرابيفاي — مدعوم من Puter.js ]'));
+    assert.ok(built.includes('[ ترجمت الأداة ساب أرابيفاي ]'));
     assert.ok(built.includes('Hello World'));
     assert.ok(built.includes('Second cue text'));
 });
@@ -38,38 +36,6 @@ test('timeToMs and msToTime conversions', () => {
     const ms = timeToMs(timeStr);
     assert.equal(ms, (1 * 3600 + 2 * 60 + 3) * 1000 + 456);
     assert.equal(msToTime(ms), timeStr);
-});
-
-test('extractResponseText formats', () => {
-    assert.equal(extractResponseText('plain text'), 'plain text');
-    assert.equal(extractResponseText({ text: 'object text' }), 'object text');
-    assert.equal(extractResponseText({ message: { content: 'message text' } }), 'message text');
-    assert.equal(extractResponseText({ message: { content: [{ text: 'part 1 ' }, 'part 2'] } }), 'part 1 part 2');
-    assert.equal(extractResponseText(null), '');
-});
-
-test('withRetry handles success and retries', async () => {
-    let attempts = 0;
-    const successFn = async () => {
-        attempts++;
-        if (attempts < 2) throw new Error('Temporary failure');
-        return 'success';
-    };
-
-    const res = await withRetry(successFn, 3, 'Test retry');
-    assert.equal(res, 'success');
-    assert.equal(attempts, 2);
-});
-
-test('withRetry throws after max retries', async () => {
-    const failFn = async () => {
-        throw new Error('Persistent failure');
-    };
-
-    await assert.rejects(
-        async () => await withRetry(failFn, 2, 'Test fail'),
-        { message: 'Persistent failure' }
-    );
 });
 
 test('enqueueFile validates file types and manages queue', async () => {
