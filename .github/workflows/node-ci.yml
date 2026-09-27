@@ -1,0 +1,32 @@
+name: Node Tests
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*.*.*" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: npm
+
+    - name: Install dependencies
+      run: npm ci
+
+    # The OpenSubtitles/TMDB secrets power the live contract tests; when they
+    # are absent those tests skip themselves instead of failing the build.
+    - name: Run test suite
+      run: npm test
+      env:
+        OPENSUBTITLES_API_KEY: ${{ secrets.OpenSubtitles }}
+        TMDB_API_KEY: ${{ secrets.TMDBAPI }}

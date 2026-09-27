@@ -2,6 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const chokidar = require('chokidar');
+const { identifyMovie } = require('./movie-identifier.js');
+const { findSubtitle } = require('./subtitle-finder.js');
+const { parseSRT, buildSRT, timeToMs, msToTime, normalizeToUtf8 } = require('./srt-utils.js');
+const { logDecision } = require('./decision-log.js');
 
 // Global error handlers to prevent socket/fetch terminations from abruptly stopping the daemon
 process.on('unhandledRejection', (reason) => {
@@ -81,29 +85,16 @@ function enqueueFile(filePath) {
     return true;
 }
 
-// 1. SRT Parser and Builder
-function parseSRT(data) {
-  const pattern = /(\d+)\r?\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\r?\n([\s\S]*?)(?=\r?\n\r?\n|\r?\n*$)/g;
-  const result = [];
-  let match;
-  while ((match = pattern.exec(data)) !== null) {
-    result.push({
-      index: match[1],
-      start: match[2],
-      end: match[3],
-      text: match[4].trim()
-    });
-  }
-  return result;
-}
+// SRT parsing/building now lives in srt-utils.js (shared with the finder).
 
-function buildSRT(cues) {
-  let srt = `1\n00:00:01,000 --> 00:00:04,000\n[ ترجمت الأداة ساب أرابيفاي — مدعوم من Puter.js ]\n\n`;
-  cues.forEach((cue, idx) => {
-    srt += `${idx + 2}\n${cue.start} --> ${cue.end}\n${cue.text}\n\n`;
-  });
-  return srt;
-}
+// Pipeline hooks — swappable in tests, defaults are the real implementations.
+let subtitleFinder = findSubtitle;
+let srtTranslator = translateSRTWithPuter;
+let audioTranscriber = transcribeAudioWithPuter;
+
+function setSubtitleFinder(fn) { subtitleFinder = fn; }
+function setSrtTranslator(fn) { srtTranslator = fn; }
+function setAudioTranscriber(fn) { audioTranscriber = fn; }
 
 // Helper: Retries a function up to maxRetries times
 async function withRetry(fn, maxRetries = 3, contextMsg = "") {
@@ -184,19 +175,7 @@ ${textChunk}`;
   console.log(`[Success] Subtitle saved: ${targetArSrtPath}`);
 }
 
-// Timestamp helpers for chunk offset merging
-function timeToMs(t) {
-  const [hms, ms] = t.trim().split(',');
-  const [h, m, s] = hms.split(':').map(Number);
-  return (h * 3600 + m * 60 + s) * 1000 + Number(ms);
-}
-function msToTime(d) {
-  const ms = d % 1000;
-  const s = Math.floor((d / 1000) % 60);
-  const m = Math.floor((d / (1000 * 60)) % 60);
-  const h = Math.floor(d / (1000 * 60 * 60));
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')},${String(ms).padStart(3,'0')}`;
-}
+// Timestamp helpers come from srt-utils.js.
 
 // 3. Puter.js Audio-to-Subtitle Fallback (chunked for 25MB limit)
 async function transcribeAudioWithPuter(videoPath, targetArSrtPath) {
@@ -309,27 +288,64 @@ async function transcribeAudioWithPuter(videoPath, targetArSrtPath) {
 }
 
 // 4. File Processor & Folder Monitor
+// Pipeline: existing branded output → skip | ready-made Arabic → brand only |
+// ready-made English → Puter translation | nothing → audio transcription.
 async function processVideoFile(videoPath) {
   const dir = path.dirname(videoPath);
   const ext = path.extname(videoPath);
   const baseName = path.basename(videoPath, ext);
   const arSrtPath = path.join(dir, `${baseName}.SubArabify.ar.srt`);
 
-  if (fs.existsSync(arSrtPath)) return;
-
-  // Search logic designed for TV episodes (match exact name first)
-  const targetedSrtPath = path.join(dir, `${baseName}.srt`);
-  const engSrtPath = path.join(dir, 'eng.srt');
-  
-  const sourceSrt = fs.existsSync(targetedSrtPath) 
-                      ? targetedSrtPath 
-                      : (fs.existsSync(engSrtPath) ? engSrtPath : null);
-
-  if (sourceSrt) {
-    await translateSRTWithPuter(sourceSrt, arSrtPath);
-  } else {
-    await transcribeAudioWithPuter(videoPath, arSrtPath);
+  if (fs.existsSync(arSrtPath)) {
+    logDecision({ file: videoPath, action: 'skip', reason: 'existing-output' });
+    return;
   }
+
+  let result = null;
+  try {
+    const movie = identifyMovie(baseName);
+    console.log(`[Finder] Identified: "${movie.title}"${movie.year ? ` (${movie.year})` : ''} — looking for subtitles...`);
+    result = await subtitleFinder(videoPath, { movie });
+  } catch (err) {
+    console.error(`[Finder] Subtitle lookup failed for ${path.basename(videoPath)}: ${err.message}`);
+    logDecision({ file: videoPath, action: 'finder-error', reason: err.message });
+  }
+
+  if (result && result.status === 'found' && result.language === 'ar') {
+    const { text } = normalizeToUtf8(fs.readFileSync(result.path));
+    const cues = parseSRT(text);
+    if (cues.length > 0) {
+      fs.writeFileSync(arSrtPath, buildSRT(cues), 'utf8');
+      logDecision({
+        file: videoPath,
+        action: 'brand-arabic',
+        language: 'ar',
+        source: result.source,
+        match: result.match,
+        provider: result.provider,
+        cueCount: cues.length
+      });
+      console.log(`[Success] Ready-made Arabic subtitle branded (no translation): ${path.basename(arSrtPath)}`);
+      return;
+    }
+  }
+
+  if (result && result.status === 'found' && result.language === 'en') {
+    logDecision({
+      file: videoPath,
+      action: 'translate',
+      language: 'en',
+      source: result.source,
+      match: result.match,
+      provider: result.provider,
+      cueCount: result.cueCount
+    });
+    await srtTranslator(result.path, arSrtPath);
+    return;
+  }
+
+  logDecision({ file: videoPath, action: 'audio-fallback', reason: 'no-ready-made-subtitle' });
+  await audioTranscriber(videoPath, arSrtPath);
 }
 
 // Initial full-scan on boot + active watching
@@ -379,6 +395,12 @@ module.exports = {
     msToTime,
     processVideoFile,
     setVideoProcessor,
+    setSubtitleFinder,
+    setSrtTranslator,
+    setAudioTranscriber,
+    identifyMovie,
+    findSubtitle,
+    logDecision,
     enqueueFile,
     processQueue,
     fileQueue,

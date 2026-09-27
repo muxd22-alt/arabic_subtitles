@@ -1,5 +1,39 @@
 # Changelog
 
+## 3.0.1-beta — subtitle-first pipeline, stage 1: identify + fetch
+
+First slice of the genre-aware rebuild: stop reaching for the microphone when a
+subtitle already exists. AI transcription is now the last resort, not the default.
+
+- **`movie-identifier.js`** — release name → `{title, year, season/episode}` via
+  `parse-torrent-title` (MIT, pure JS) with a cleaned/fuzzy fallback when the parser
+  finds nothing; noise-only names (`___1080p___`) are rejected instead of invented.
+- **`opensubtitles.js`** — plain REST client for OpenSubtitles.com v1 (no SDK):
+  `GET /subtitles` search (moviehash → title+year), the two-step `POST /download` link
+  flow, optional `/login` JWT when account credentials are configured, 429/5xx retries,
+  quota-exhaustion detection, and a dependency-free **OSHash** implementation verified
+  against the canonical `opensubtitles/oshash` test vectors.
+- **`subtitle-finder.js`** — the priority ladder: local Arabic → OpenSubtitles Arabic →
+  local English → OpenSubtitles English → nothing. Arabic is classified by *content*, not
+  just file name; its own output/cache files are never re-consumed; every candidate is
+  validated (SRT parse, cue-count-vs-runtime sanity, UTF-8 normalization incl. BOM/UTF-16)
+  before it is accepted. Exposes a provider hook for the later `subliminal_patch` layer.
+- **`srt-utils.js`** — shared parse/validate/build/normalize helpers; the historic
+  watermark cue and `MovieName.SubArabify.ar.srt` naming are unchanged.
+- **`decision-log.js` + `config.js`** — every per-movie decision appended as JSONL to
+  `logs/decisions.jsonl` (no native SQLite — it is fragile to build on Termux/ARM64), and
+  a dependency-free `.env` loader for `OPENSUBTITLES_API_KEY` / `TMDB_API_KEY`.
+- **Watch loop** — `processVideoFile` now routes: existing output → skip · Arabic →
+  brand only · English → Puter translation · none → audio transcription, with injectable
+  hooks so tests never touch the network.
+- **Tests** — 63 cases (`npm test`): identifier across genres (sci-fi, horror, TV,
+  Arabic filenames), OSHash canonical vectors + zero-padding, SRT validation/encoding,
+  finder ordering with mocked providers, and full pipeline routing.
+- **CI** — new `Node Tests` workflow runs the suite with the `OpenSubtitles`/`TMDBAPI`
+  repository secrets; live contract tests skip cleanly when the keys are absent.
+- App: `versionCode` 26, `versionName "3.0.1-beta"` (label + banner bumped).
+- Docs: README documents the fallback order, `.env` keys, and a manual test plan.
+
 ## 0.2.3-alpha — same engine, versioned
 
 First cut re-releasing the clean-slate stack under a new version line. Everything from

@@ -1,6 +1,6 @@
 {
   "name": "subarabify-puter",
-  "version": "2.0.0",
+  "version": "3.0.1-beta",
   "description": "SubArabify Puter.js Edition",
   "main": "subarabify.js",
   "scripts": {
@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@heyputer/puter.js": "^2.6.3",
-    "chokidar": "^3.6.0"
+    "chokidar": "^3.6.0",
+    "parse-torrent-title": "^3.0.1"
   },
   "keywords": [],
   "author": "",
