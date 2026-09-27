@@ -27,7 +27,10 @@ function stripExtension(name) {
 }
 
 function stripDirectory(name) {
-    return path.basename(name);
+    // Handle both separators on every platform (a Windows path may be
+    // parsed on Linux and vice versa, e.g. shared test fixtures).
+    const parts = name.split(/[\\/]+/);
+    return parts[parts.length - 1] || name;
 }
 
 function normalizeWhitespace(text) {
