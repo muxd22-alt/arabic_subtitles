@@ -110,6 +110,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         startStatusPolling()
+        // first launch → straight into the one-liner walkthrough
+        if (!prefs.getBoolean("setup_done", false)) showWizard = true
         setContent {
             ArabicSubsTheme {
                 val context = LocalContext.current
@@ -130,7 +132,7 @@ class MainActivity : ComponentActivity() {
                                         color = Gold500.copy(alpha = 0.15f),
                                     ) {
                                         Text(
-                                            "v1.1.3",
+                                            "v1.1.4",
                                             color = Gold500,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
@@ -162,9 +164,12 @@ class MainActivity : ComponentActivity() {
                         if (showWizard) {
                             SetupWizard(
                                 mediaPaths = folders.map { it.rawPath },
-                                autoCopy = autoCopy,
-                                onAutoCopyChange = { autoCopy = it },
-                                onDismiss = { showWizard = false },
+        autoCopy = autoCopy,
+        onAutoCopyChange = { autoCopy = it },
+        onPickFolders = {
+            folderPickerLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE))
+        },
+        onDismiss = { showWizard = false },
                                 onCompleted = { prefs.edit().putBoolean("setup_done", true).apply() }
                             )
                         }
@@ -235,7 +240,6 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "المجلد مضاف مسبقاً", Toast.LENGTH_SHORT).show()
             return
         }
-        val firstFolder = folders.isEmpty()
         folders.add(
             MediaFolder(
                 id = uri.toString(),
@@ -244,8 +248,6 @@ class MainActivity : ComponentActivity() {
             )
         )
         scanFolders()
-        // first folder ever chosen → walk the user through Termux, line by line
-        if (firstFolder && !prefs.getBoolean("setup_done", false)) showWizard = true
     }
 
     // ── Engine launch ─────────────────────────────────────────────────
@@ -378,7 +380,7 @@ class MainActivity : ComponentActivity() {
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // one-line-at-a-time Termux walkthrough
+            // three steps: one Termux command, pick folders, start the engine
             OutlinedButton(
                 onClick = { showWizard = true },
                 modifier = Modifier.fillMaxWidth().height(46.dp),
@@ -387,7 +389,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 Icon(Icons.Default.List, contentDescription = null, tint = Gold500, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("الإعداد خطوة بخطوة مع تيرمكس", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Gold500)
+                Text("الإعداد: أمر واحد في تيرمكس ثم اختيار المجلدات", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Gold500)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -655,8 +657,25 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    steps.forEachIndexed { i, step ->
-                        item { SetupStep("${i + 1}️⃣  ${step.title}", step.command, context) }
+                    steps.forEach { step ->
+                        if (step.opensPicker) {
+                            item {
+                                Button(
+                                    onClick = {
+                                        folderPickerLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE))
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Gold500)
+                                ) {
+                                    Text("📂  اختيار مجلد أفلام / مسلسلات", color = DarkBg, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        } else {
+                            item { SetupStep(step.title, step.command, context) }
+                        }
                     }
                 }
             },

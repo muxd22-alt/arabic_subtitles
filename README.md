@@ -41,19 +41,14 @@ Every decision lands in `logs/decisions.jsonl`.
 
 ```bash
 # 1. install Termux from F-Droid (not Play Store)
-# 2. clone + install
-pkg install nodejs ffmpeg git -y
-git clone https://github.com/muxd22-alt/arabic_subtitles.git
-cd arabic_subtitles
-npm install
 
-# 3. bootstrap: storage link + llama-server + whisper.cpp
-#    safe to re-run — every step skips what is already done and never prompts
-bash scripts/setup-termux.sh
+# 2. one line does everything: storage link, packages, code, llama-server,
+#    whisper — then asks permission before the ~590 MB of models.
+#    Safe to re-run: every step skips what is already done and never prompts twice.
+pkg update -y; pkg install -y git nodejs ffmpeg; git clone https://github.com/muxd22-alt/arabic_subtitles.git ~/arabic_subtitles 2>/dev/null; cd ~/arabic_subtitles; git pull --ff-only 2>/dev/null; npm install; ARABIC_SUBS_SKIP_UPDATE=1 bash scripts/setup-termux.sh
 
-# 4. run the engine over your media folders
-#    it asks permission before downloading the ~590 MB of models (--yes to skip the question)
-node bin/arabic-subs.js run --media /sdcard/Movies --media /sdcard/TV Shows
+# 3. run the engine over your media folders
+node bin/arabic-subs.js run --media /sdcard/Movies --media "/sdcard/TV Shows"
 ```
 
 Every source goes through **one model** — Hy-MT2. Whether the text comes from an
@@ -66,11 +61,12 @@ videos are still missing Arabic subtitles, launch the engine through Termux's
 `RUN_COMMAND` intent, and watch live progress — the engine serves a status API
 on `http://127.0.0.1:18435/status` that the app polls.
 
-Pick your first folder and the app opens a **step-by-step wizard** that walks you
-through Termux one command at a time: each command is copied to the clipboard
-automatically, and one tap sends it to Termux. Every command is idempotent, so
-re-running the wizard reports `already … — skipping` instead of asking the same
-questions again, and the wizard only auto-opens once. Grab the APK from the
+On first launch the app opens a **three-step wizard**: one Termux command that
+does everything (it is copied to the clipboard, one tap sends it to Termux),
+then back in the app to pick your Movies/TV Shows folders, then start the
+engine. Every command is idempotent, so re-running the wizard reports
+`already … — skipping` instead of asking the same questions again, and the
+wizard only auto-opens once. Grab the APK from the
 [latest release](https://github.com/muxd22-alt/arabic_subtitles/releases/latest).
 
 ## CLI

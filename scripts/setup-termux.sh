@@ -37,7 +37,10 @@ fi
 # ── 2. packages ────────────────────────────────────────────────────────────
 step "packages"
 export DEBIAN_FRONTEND=noninteractive
-pkg update -y
+# bootstrap.sh already refreshed the index — don't do it twice
+if [ "${ARABIC_SUBS_SKIP_UPDATE:-0}" != "1" ]; then
+    pkg update -y
+fi
 # an upgrade is what repairs "CANNOT LINK EXECUTABLE cmake … missing symbol",
 # which happens when the toolchain was built against a newer libc++
 apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade || true
@@ -119,6 +122,10 @@ if [ "$WANT_YES" -eq 1 ]; then
 elif [ -t 0 ]; then
     printf '[setup]   Download now? [y/N] '
     read -r ANSWER || ANSWER=""
+elif [ -r /dev/tty ]; then
+    # `curl … | bash` leaves stdin as a pipe — ask on the terminal itself
+    printf '[setup]   Download now? [y/N] ' > /dev/tty
+    read -r ANSWER < /dev/tty || ANSWER=""
 else
     echo "[setup]   not a terminal — nothing downloaded."
 fi

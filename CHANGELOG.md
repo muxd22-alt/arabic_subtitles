@@ -1,7 +1,19 @@
 # Changelog
 
-## Unreleased
+## 1.1.4 — one command in Termux, then back to the app
 
+- **Wizard rewritten to three steps**: ① one Termux command that does everything
+  (storage link, packages, clone-or-update, `npm install`,
+  `scripts/setup-termux.sh` → llama-server + whisper + models after you say yes),
+  ② pick the Movies/TV Shows folders from inside the app (the step opens the
+  system folder picker itself), ③ start the engine over what you picked.
+- The wizard now auto-opens on **first launch** instead of after the first
+  folder, because the folder step is step 2 of the flow.
+- New `scripts/bootstrap.sh` — the same setup behind
+  `curl … | bash` for people who prefer a one-liner without a repo.
+- `scripts/setup-termux.sh` asks for the model download permission on
+  `/dev/tty` when stdin is a pipe (so `curl | bash` still prompts), and skips
+  the duplicate `pkg update` when bootstrap already refreshed the index.
 - `run` / `translate` now offer to install `llama-server` themselves: when the
   binary is missing on Termux they ask `Install the Termux package "llama-cpp"
   now? [y/N]` and run `pkg install -y llama-cpp` for you, falling back to
@@ -9,6 +21,7 @@
 - Watermark wording corrected: the first cue now reads
   `[ ترجمة الأداة عربي سبس ]` (was `ترجمت`). Engine only - no new APK needed,
   `git pull` picks it up on the next run.
+- `versionCode 6`, `versionName 1.1.4`.
 
 ## 1.1.3 — self-updating setup, guards that survive the clipboard
 

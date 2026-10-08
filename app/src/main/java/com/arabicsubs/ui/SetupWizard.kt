@@ -35,20 +35,25 @@ data class WizardStep(
     val title: String,
     val hint: String,
     val command: String,
-    val runsEngine: Boolean = false
+    val runsEngine: Boolean = false,
+    val opensPicker: Boolean = false
 )
 
+const val SETUP_ONE_LINER =
+    "pkg update -y; pkg install -y git nodejs ffmpeg; " +
+        "git clone https://github.com/muxd22-alt/arabic_subtitles.git ~/arabic_subtitles 2>/dev/null; " +
+        "cd ~/arabic_subtitles; git pull --ff-only 2>/dev/null; npm install; " +
+        "ARABIC_SUBS_SKIP_UPDATE=1 bash scripts/setup-termux.sh"
+
 /**
- * The onboarding script: one command per step, always LTR.
+ * Three steps, that's all: one command in Termux that does everything, then
+ * back here to choose the folders, then start the engine.
  *
- * Every command is idempotent — running the wizard a second time (or the same
- * step twice) reports "already done" instead of prompting again, so the flow
- * never looks different from what the user saw the first time.
- * The last step is rebuilt from whatever folders the user picked.
+ * Everything in step 1 is idempotent, so running it again reports
+ * "already … — skipping" instead of prompting through the same questions.
  *
- * No `||` anywhere: a couple of Android clipboards have been observed eating
- * the token while copying, which turned `A || B` into `A  B`. Guards are
- * written with if/then/fi instead.
+ * No `||` and no pipe: a couple of Android clipboards have been observed
+ * eating those tokens while copying, which turned `A || B` into `A  B`.
  */
 fun buildWizardSteps(mediaPaths: List<String>): List<WizardStep> {
     val media = (if (mediaPaths.isEmpty()) listOf("/sdcard/Movies") else mediaPaths)
@@ -56,28 +61,19 @@ fun buildWizardSteps(mediaPaths: List<String>): List<WizardStep> {
 
     return listOf(
         WizardStep(
-            title = "منح إذن التخزين",
-            hint = "مرة واحدة فقط: يفتح نافذة الإذن إن لم يكن ~/storage موجوداً، وإلا يتجاوز.",
-            command = "if [ -e ~/storage/shared ]; then echo storage-already-linked; else termux-setup-storage; fi"
+            title = "١ — أمر واحد في تيرمكس",
+            hint = "ينفّذ كل شيء مرة واحدة: إذن التخزين، الحزم، تحميل الكود، llama-server، whisper — ثم يسأل قبل تنزيل النماذج (~590MB). يستغرق ٥ إلى ١٥ دقيقة.",
+            command = SETUP_ONE_LINER
         ),
         WizardStep(
-            title = "تثبيت الحزم المطلوبة",
-            hint = "Node.js لتشغيل المحرك و ffmpeg لاستخراج الصوت — يتجاهل ما هو مثبت بالفعل.",
-            command = "pkg install -y nodejs ffmpeg git"
+            title = "٢ — اختر مجلداتك",
+            hint = "عد إلى الشاشة الرئيسية وأضف مجلد الأفلام أو المسلسلات — أو اضغط الزر بالأسفل الآن. يمكنك إضافة أكثر من مجلد.",
+            command = "",
+            opensPicker = true
         ),
         WizardStep(
-            title = "تحميل أو تحديث المشروع",
-            hint = "أول مرة ينسخ الكود، وبعدها يحدّثه git pull حتى تحصل على آخر الإصلاحات.",
-            command = "if [ -d ~/arabic_subtitles ]; then cd ~/arabic_subtitles; git pull --ff-only; else git clone https://github.com/muxd22-alt/arabic_subtitles.git; fi; cd ~/arabic_subtitles; npm install"
-        ),
-        WizardStep(
-            title = "الأدوات والنماذج",
-            hint = "يحدّث المستودع بنفسه أولاً، ثم يثبّت llama-server و whisper وينزّل النماذج (~590MB) بعد موافقتك.",
-            command = "cd ~/arabic_subtitles && bash scripts/setup-termux.sh"
-        ),
-        WizardStep(
-            title = "تشغيل المحرك",
-            hint = "يحدّث الكود ثم يبدأ الفحص والترجمة التلقائية لمجلداتك المختارة.",
+            title = "٣ — تشغيل المحرك",
+            hint = "يحدّث الكود ثم يبدأ الفحص والترجمة التلقائية لكل مجلد اخترته.",
             command = "cd ~/arabic_subtitles; git pull --ff-only 2>/dev/null; node bin/arabic-subs.js run $media",
             runsEngine = true
         )
@@ -109,6 +105,7 @@ fun SetupWizard(
     mediaPaths: List<String>,
     autoCopy: Boolean,
     onAutoCopyChange: (Boolean) -> Unit,
+    onPickFolders: () -> Unit = {},
     onDismiss: () -> Unit,
     onCompleted: () -> Unit = {}
 ) {
@@ -120,10 +117,10 @@ fun SetupWizard(
     val step = steps[index]
     val isLast = index == steps.lastIndex
 
-    // auto-copy: every time a step is shown, its command lands on the clipboard
+    // auto-copy: every time a step shows a command, it lands on the clipboard
     LaunchedEffect(index, autoCopy) {
         copied = false
-        if (autoCopy) {
+        if (autoCopy && step.command.isNotEmpty()) {
             copyCommand(context, step.command)
             copied = true
         }
@@ -174,6 +171,31 @@ fun SetupWizard(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
+                if (step.opensPicker) {
+                    // this step has no command — the app itself opens the folder picker
+                    Button(
+                        onClick = onPickFolders,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Gold500)
+                    ) {
+                        Text(
+                            "📂  اختيار مجلد أفلام / مسلسلات",
+                            color = DarkBg,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "أو من الشاشة الرئيسية: «إضافة مجلد» — أضف ما تشاء ثم عد إلى هذه النافذة.",
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(
                         checked = autoCopy,
@@ -204,7 +226,7 @@ fun SetupWizard(
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         modifier = Modifier.weight(1f),
-                        maxLines = 4,
+                        maxLines = 6,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -277,6 +299,7 @@ fun SetupWizard(
                         color = WarnAmber,
                         fontSize = 12.sp
                     )
+                }
                 }
             }
         },
