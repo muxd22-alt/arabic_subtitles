@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.3 — self-updating setup, guards that survive the clipboard
+
+- `scripts/setup-termux.sh` pulls the latest checkout and re-executes itself, so
+  a phone holding an old copy of the script still gets the fixed version
+  (broken-cmake repair, permission-gated downloads, idempotent steps).
+- Wizard commands no longer contain `||` — a couple of Android clipboards drop
+  that token while copying, turning `A || B` into `A  B`. All guards are written
+  with `if/then/fi` now.
+- The run/translate commands do a quiet `git pull --ff-only` before starting the
+  engine, so an outdated clone can no longer keep answering
+  `Model not ready (missing)`.
+- Wizard step 3 pulls before `npm install`; step 2 installs `git` too.
+- `versionCode 5`, `versionName 1.1.3`.
+
 ## 1.1.2 — the wizard updates an existing clone
 
 - Wizard step 3 now runs `git pull --ff-only` when `~/arabic_subtitles` already

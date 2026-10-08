@@ -130,7 +130,7 @@ class MainActivity : ComponentActivity() {
                                         color = Gold500.copy(alpha = 0.15f),
                                     ) {
                                         Text(
-                                            "v1.1.2",
+                                            "v1.1.3",
                                             color = Gold500,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
@@ -252,7 +252,8 @@ class MainActivity : ComponentActivity() {
 
     private fun buildRunCommand(): String {
         val mediaArgs = folders.joinToString(" ") { "--media \"${it.rawPath}\"" }
-        return "cd ~/arabic_subtitles && node bin/arabic-subs.js run $mediaArgs"
+        // pull first: an old checkout on the phone would keep running an old engine
+        return "cd ~/arabic_subtitles; git pull --ff-only 2>/dev/null; node bin/arabic-subs.js run $mediaArgs"
     }
 
     private fun launchTermuxEngine(context: Context, singleFile: String? = null) {
@@ -261,7 +262,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         val cmd = if (singleFile != null) {
-            "cd ~/arabic_subtitles && node bin/arabic-subs.js translate \"$singleFile\""
+            "cd ~/arabic_subtitles; git pull --ff-only 2>/dev/null; node bin/arabic-subs.js translate \"$singleFile\""
         } else {
             buildRunCommand()
         }

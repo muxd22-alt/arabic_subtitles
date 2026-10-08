@@ -13,6 +13,17 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WANT_YES=0
 if [ "${1:-}" = "--yes" ]; then WANT_YES=1; fi
 
+# Self-update: an old checkout on the phone runs an old copy of this script,
+# so pull first and re-exec the fresh one. Offline / detached → keep going.
+if [ "${ARABIC_SUBS_BOOTSTRAPPED:-0}" != "1" ] && [ -d "$ROOT/.git" ]; then
+    if command -v git >/dev/null 2>&1; then
+        if git -C "$ROOT" pull --ff-only >/dev/null 2>&1; then
+            echo "[setup] repo updated to the latest version"
+        fi
+    fi
+    ARABIC_SUBS_BOOTSTRAPPED=1 exec bash "$0" "$@"
+fi
+
 step() { echo; echo "[setup] $*"; }
 
 # ── 1. storage link ────────────────────────────────────────────────────────

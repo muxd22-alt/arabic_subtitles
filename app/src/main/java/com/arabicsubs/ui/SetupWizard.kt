@@ -45,6 +45,10 @@ data class WizardStep(
  * step twice) reports "already done" instead of prompting again, so the flow
  * never looks different from what the user saw the first time.
  * The last step is rebuilt from whatever folders the user picked.
+ *
+ * No `||` anywhere: a couple of Android clipboards have been observed eating
+ * the token while copying, which turned `A || B` into `A  B`. Guards are
+ * written with if/then/fi instead.
  */
 fun buildWizardSteps(mediaPaths: List<String>): List<WizardStep> {
     val media = (if (mediaPaths.isEmpty()) listOf("/sdcard/Movies") else mediaPaths)
@@ -53,28 +57,28 @@ fun buildWizardSteps(mediaPaths: List<String>): List<WizardStep> {
     return listOf(
         WizardStep(
             title = "منح إذن التخزين",
-            hint = "مرة واحدة فقط. إن رأيت \"directory '~/storage' already exists\" اكتب n — الإذن ممنوح أصلاً.",
-            command = "[ -e ~/storage/shared ] && echo \"storage: already linked\" || termux-setup-storage"
+            hint = "مرة واحدة فقط: يفتح نافذة الإذن إن لم يكن ~/storage موجوداً، وإلا يتجاوز.",
+            command = "if [ -e ~/storage/shared ]; then echo storage-already-linked; else termux-setup-storage; fi"
         ),
         WizardStep(
             title = "تثبيت الحزم المطلوبة",
             hint = "Node.js لتشغيل المحرك و ffmpeg لاستخراج الصوت — يتجاهل ما هو مثبت بالفعل.",
-            command = "pkg install -y nodejs ffmpeg"
+            command = "pkg install -y nodejs ffmpeg git"
         ),
         WizardStep(
-            title = "تحميل المشروع",
-            hint = "ينسخ الكود أول مرة، ويجري git pull لتحديثه في المرة القادمة، ثم يثبّت الحزم.",
-            command = "if [ ! -d ~/arabic_subtitles ]; then git clone https://github.com/muxd22-alt/arabic_subtitles.git; fi; cd ~/arabic_subtitles && git pull --ff-only; npm install"
+            title = "تحميل أو تحديث المشروع",
+            hint = "أول مرة ينسخ الكود، وبعدها يحدّثه git pull حتى تحصل على آخر الإصلاحات.",
+            command = "if [ -d ~/arabic_subtitles ]; then cd ~/arabic_subtitles; git pull --ff-only; else git clone https://github.com/muxd22-alt/arabic_subtitles.git; fi; cd ~/arabic_subtitles; npm install"
         ),
         WizardStep(
             title = "الأدوات والنماذج",
-            hint = "يثبّت llama-server و whisper وينزّل النماذج (~590MB) بعد موافقتك — يتخطّى ما هو جاهز.",
+            hint = "يحدّث المستودع بنفسه أولاً، ثم يثبّت llama-server و whisper وينزّل النماذج (~590MB) بعد موافقتك.",
             command = "cd ~/arabic_subtitles && bash scripts/setup-termux.sh"
         ),
         WizardStep(
             title = "تشغيل المحرك",
-            hint = "يبدأ الفحص والترجمة التلقائية لمجلداتك المختارة.",
-            command = "cd ~/arabic_subtitles && node bin/arabic-subs.js run $media",
+            hint = "يحدّث الكود ثم يبدأ الفحص والترجمة التلقائية لمجلداتك المختارة.",
+            command = "cd ~/arabic_subtitles; git pull --ff-only 2>/dev/null; node bin/arabic-subs.js run $media",
             runsEngine = true
         )
     )
