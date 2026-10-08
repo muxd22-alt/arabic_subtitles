@@ -73,12 +73,17 @@ async function cmdSetup(args) {
     const skipModel = Boolean(args.flags['skip-model']);
     const skipWhisper = Boolean(args.flags['skip-whisper']);
 
+    console.log('[Setup] One model serves every path — subtitle translation and');
+    console.log('[Setup] audio transcription both run through Hy-MT2:');
+
     if (!skipModel) {
         const before = modelStatus();
         if (before.state === 'ready') {
             console.log(`[Setup] Hy-MT2 model already present (${fmtBytes(before.bytes)})`);
         } else {
-            console.log(`[Setup] Downloading Hy-MT2-1.8B (1.25-bit, ~440 MB)…`);
+            console.log(`[Setup] Downloading Hy-MT2-1.8B (1.25-bit, ~440 MB)`);
+            console.log(`[Setup]   page:  ${HF_MODEL_CARD}`);
+            console.log(`[Setup]   file:  ${HF_MODEL_REPO}`);
             await downloadModel({ onProgress: progressLine('[Model]') });
             console.log(`[Setup] Model ready: ${config.MODEL_PATH}`);
         }
@@ -89,7 +94,8 @@ async function cmdSetup(args) {
         if (before.state === 'ready') {
             console.log(`[Setup] Whisper model already present (${fmtBytes(before.bytes)})`);
         } else {
-            console.log(`[Setup] Downloading whisper ggml-${config.WHISPER_MODEL} for the audio path…`);
+            console.log(`[Setup] Downloading whisper ggml-${config.WHISPER_MODEL} for the audio path (~150 MB)`);
+            console.log(`[Setup]   page:  ${HF_WHISPER_REPO}`);
             await downloadWhisperModel({ onProgress: progressLine('[Whisper]') });
             console.log(`[Setup] Whisper model ready: ${config.WHISPER_PATH}`);
         }
@@ -97,6 +103,130 @@ async function cmdSetup(args) {
 
     console.log('[Setup] Done. Run: node bin/arabic-subs.js run --media /sdcard/Movies');
     return 0;
+}
+
+/**
+ * Every source — an English subtitle, an embedded track, or whisper output —
+ * is translated by the SAME model (Hy-MT2). Only the way we obtain the text
+ * differs per video, so only ONE model ever needs to be on disk.
+ *
+ * Nothing is fetched silently: we list what is missing (with its Hugging Face
+ * page) and ask the user for permission first, unless --yes was passed.
+ */
+const HF_MODEL_CARD = 'https://huggingface.co/tencent/Hy-MT2-1.8B';
+const HF_MODEL_REPO = 'https://huggingface.co/tencent/Hy-MT2-1.8B-1.25Bit-GGUF';
+const HF_WHISPER_REPO = 'https://huggingface.co/ggerganov/whisper.cpp';
+
+function isYes(value) {
+    return value === true || value === 'true' || value === 'y' || value === 'yes';
+}
+
+/** Ask a y/N question on the terminal. Resolves 'y' | 'n' | null when there is no tty. */
+function ask(question) {
+    return new Promise((resolve) => {
+        if (!process.stdin.isTTY) return resolve(null);
+        process.stdout.write(question);
+        const onData = (buf) => {
+            process.stdin.off('data', onData);
+            process.stdin.pause();
+            const text = buf.toString('utf8').trim().toLowerCase();
+            resolve(text.startsWith('y') ? 'y' : 'n');
+        };
+        process.stdin.on('data', onData);
+        process.stdin.resume();
+    });
+}
+
+async function ensureDownloads(flags) {
+    const model = modelStatus();
+    const needModel = model.state !== 'ready';
+    const haveWhisperBin = Boolean(findWhisper());
+    const needWhisper = haveWhisperBin && whisperStatus().state !== 'ready';
+
+    if (!haveWhisperBin) {
+        console.log('[Engine] whisper-cli not found — videos with no subtitle at all will be skipped.');
+        console.log('[Engine] Install it with: bash scripts/setup-termux.sh');
+    }
+
+    if (!needModel && !needWhisper) return true;
+
+    if (flags['no-download'] === true) {
+        if (needModel) {
+            console.log(`[Engine] Model not ready (${model.state}). Run: node bin/arabic-subs.js setup`);
+            return false;
+        }
+        return true;
+    }
+
+    console.log('[Engine] Missing downloads:');
+    if (needModel) {
+        console.log(`[Engine]   Hy-MT2-1.8B (1.25-bit GGUF)  ${fmtBytes(config.MODEL_BYTES)}  ${HF_MODEL_REPO}`);
+        console.log(`[Engine]   model card: ${HF_MODEL_CARD}`);
+        console.log('[Engine]   used for every path: subtitle translation and audio transcription alike');
+    }
+    if (needWhisper) {
+        console.log(`[Engine]   whisper ggml-${config.WHISPER_MODEL}  ~150 MB  ${HF_WHISPER_REPO}`);
+    }
+
+    let allowed = isYes(flags.yes);
+    if (!allowed) {
+        const answer = await ask('[Engine] Download now? [y/N] ');
+        if (answer === null) {
+            console.log('[Engine] Nothing downloaded — no terminal to ask.');
+            console.log('[Engine] Allow it with: node bin/arabic-subs.js run --media <dir> --yes');
+            return !needModel;
+        }
+        allowed = answer === 'y';
+    }
+
+    if (!allowed) {
+        console.log('[Engine] Download cancelled.');
+        console.log('[Engine] Get them yourself: node bin/arabic-subs.js setup');
+        return !needModel;
+    }
+
+    if (needModel) {
+        console.log(`[Engine] Downloading Hy-MT2 from ${HF_MODEL_REPO} (resumable)…`);
+        try {
+            await downloadModel({ onProgress: progressLine('[Model]') });
+            console.log(`[Engine] Model ready: ${config.MODEL_PATH}`);
+        } catch (err) {
+            console.log(`[Engine] Model download failed: ${err.message}`);
+            console.log('[Engine] Retry: node bin/arabic-subs.js setup   (resumes from where it stopped)');
+            return false;
+        }
+    }
+
+    if (needWhisper) {
+        console.log('[Engine] Downloading whisper model for the audio path…');
+        try {
+            await downloadWhisperModel({ onProgress: progressLine('[Whisper]') });
+            console.log('[Engine] Whisper model ready.');
+        } catch (err) {
+            console.log(`[Engine] Whisper download failed: ${err.message} — audio path disabled for now`);
+        }
+    }
+
+    return true;
+}
+
+/** Start llama-server, translating the "binary missing" failure into a next step. */
+async function startServer(flags) {
+    const server = new LlamaServer();
+    console.log('[Engine] Starting llama-server with Hy-MT2…');
+    try {
+        await server.start({ verbose: Boolean(flags.verbose) });
+    } catch (err) {
+        if (/binary not found/i.test(err.message)) {
+            console.error('[Engine] llama-server is not installed yet.');
+            console.error('[Engine] Run: bash scripts/setup-termux.sh');
+            console.error('[Engine] If cmake fails with a missing symbol, first run: pkg upgrade -y');
+            return null;
+        }
+        throw err;
+    }
+    console.log(`[Engine] Ready at ${server.baseUrl}`);
+    return server;
 }
 
 async function cmdRun(args) {
@@ -109,22 +239,16 @@ async function cmdRun(args) {
     }
     if (mediaArgs.length === 0) mediaArgs.push('/sdcard/Movies');
 
-    const status = modelStatus();
-    if (status.state !== 'ready') {
-        console.error(`[Engine] Model not ready (${status.state}). Run: node bin/arabic-subs.js setup`);
-        return 1;
-    }
+    if (!(await ensureDownloads(args.flags))) return 1;
 
-    const server = new LlamaServer();
-    console.log('[Engine] Starting llama-server with Hy-MT2…');
-    await server.start({ verbose: Boolean(args.flags.verbose) });
-    console.log(`[Engine] Ready at ${server.baseUrl}`);
+    const server = await startServer(args.flags);
+    if (!server) return 1;
 
     const queue = new JobQueue({
         process: async (file) => {
             return processVideo(file, {
                 server,
-                onStage: (s) => console.log(`[Stage] ${path.basename(file)} → ${s.stage}${s.cueCount ? ` (${s.cueCount} cues)` : ''}`),
+                onStage: (s) => console.log(`[Stage] ${path.basename(file)} → ${s.stage}${s.source ? ` (${s.source})` : ''}${s.cueCount ? ` (${s.cueCount} cues)` : ''}`),
                 onProgress: (p) => {
                     if (p.stage === 'transcribe') {
                         process.stderr.write(`\r[ASR] ${p.done}/${p.total} chunks   `);
@@ -205,14 +329,10 @@ async function cmdTranslate(args) {
         return 1;
     }
 
-    const status = modelStatus();
-    if (status.state !== 'ready') {
-        console.error('[Translate] Model not ready. Run: node bin/arabic-subs.js setup');
-        return 1;
-    }
+    if (!(await ensureDownloads(args.flags))) return 1;
 
-    const server = new LlamaServer();
-    await server.start({ verbose: Boolean(args.flags.verbose) });
+    const server = await startServer(args.flags);
+    if (!server) return 1;
 
     try {
         for (const file of files) {
@@ -354,6 +474,8 @@ Commands:
 
 Options:
   --media <dir>              Media folder to watch (repeatable via multiple dirs)
+  --yes                      Allow the model download without being asked
+  --no-download              Never download; fail if a model is missing
   --skip-model               setup: skip the Hy-MT2 download
   --skip-whisper             setup: skip the whisper model download
   --out <file>               translate/transcribe output path

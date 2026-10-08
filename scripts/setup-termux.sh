@@ -1,25 +1,64 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Arabic Subs — Termux bootstrap
-# Installs every system dependency, then runs `arabic-subs setup`
-# (model downloads + status check).
+#
+# Safe to run any number of times: every step checks whether it is already
+# done and says so instead of asking again, so the second run looks exactly
+# like the first one.
+#
+# Usage: bash scripts/setup-termux.sh [--yes]
+#   --yes   allow the model downloads without being asked
 set -euo pipefail
 
-echo "[setup] updating package index…"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WANT_YES=0
+if [ "${1:-}" = "--yes" ]; then WANT_YES=1; fi
+
+step() { echo; echo "[setup] $*"; }
+
+# ── 1. storage link ────────────────────────────────────────────────────────
+step "storage link"
+if [ -e "$HOME/storage/shared" ]; then
+    echo "[setup]   already linked — skipping (no prompt)"
+else
+    termux-setup-storage || true
+fi
+
+# ── 2. packages ────────────────────────────────────────────────────────────
+step "packages"
+export DEBIAN_FRONTEND=noninteractive
 pkg update -y
+# an upgrade is what repairs "CANNOT LINK EXECUTABLE cmake … missing symbol",
+# which happens when the toolchain was built against a newer libc++
+apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade || true
+pkg install -y nodejs ffmpeg git
 
-echo "[setup] installing runtime packages…"
-pkg install -y nodejs ffmpeg
-
-# llama-server: llama-cpp ships the server binary in Termux (v0.6.0+).
-# Older mirrors may lack it — fall back to building llama.cpp from source.
-if ! command -v llama-server >/dev/null 2>&1; then
-    echo "[setup] llama-cpp package missing llama-server, installing pkg…"
+# ── 3. llama-server ────────────────────────────────────────────────────────
+step "llama-server (translation engine)"
+if command -v llama-server >/dev/null 2>&1; then
+    echo "[setup]   already installed — skipping"
+else
     pkg install -y llama-cpp || true
 fi
 
+ensure_cmake() {
+    if ! command -v cmake >/dev/null 2>&1; then
+        pkg install -y cmake || true
+    fi
+    if cmake --version >/dev/null 2>&1; then return 0; fi
+    echo "[setup]   cmake cannot run (missing symbol) — reinstalling cmake + libc++"
+    pkg install -y --reinstall cmake libc++ || true
+    if cmake --version >/dev/null 2>&1; then return 0; fi
+    echo "[setup]   upgrading the toolchain"
+    pkg upgrade -y || true
+    if cmake --version >/dev/null 2>&1; then return 0; fi
+    echo "[setup]   FATAL: cmake is still broken."
+    echo "[setup]   fix it by hand: pkg upgrade -y && pkg install -y --reinstall cmake libc++"
+    exit 1
+}
+
 if ! command -v llama-server >/dev/null 2>&1; then
-    echo "[setup] building llama.cpp from source (this takes a while)…"
-    pkg install -y git cmake clang
+    step "building llama.cpp from source (this takes a while)"
+    ensure_cmake
     cd "$HOME"
     rm -rf llama.cpp
     git clone --depth 1 https://github.com/ggml-org/llama.cpp.git
@@ -30,33 +69,65 @@ if ! command -v llama-server >/dev/null 2>&1; then
     cd "$HOME"
 fi
 
-# whisper.cpp is not packaged for Termux → build it for the audio path.
-if ! command -v whisper-cli >/dev/null 2>&1 && ! command -v whisper >/dev/null 2>&1; then
-    echo "[setup] building whisper.cpp from source…"
-    pkg install -y git cmake clang
+# ── 4. whisper (audio path) ────────────────────────────────────────────────
+step "whisper.cpp (audio path)"
+if command -v whisper-cli >/dev/null 2>&1 || command -v whisper >/dev/null 2>&1; then
+    echo "[setup]   already installed — skipping"
+else
+    ensure_cmake
     cd "$HOME"
     rm -rf whisper.cpp
     git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git
     cd whisper.cpp
     cmake -B build -DGGML_NATIVE=ON
     cmake --build build --config Release -j "$(nproc)"
-    ln -sf "$HOME/whisper.cpp/build/bin/whisper-cli" "$PREFIX/bin/whisper-cli" 2>/dev/null || \
+    if [ -x "$HOME/whisper.cpp/build/bin/whisper-cli" ]; then
+        ln -sf "$HOME/whisper.cpp/build/bin/whisper-cli" "$PREFIX/bin/whisper-cli"
+    else
         ln -sf "$HOME/whisper.cpp/build/bin/whisper" "$PREFIX/bin/whisper"
+    fi
     cd "$HOME"
 fi
 
 echo
-echo "[setup] toolchain ready:"
+echo "[setup] toolchain:"
 for tool in node ffmpeg ffprobe llama-server; do
     printf '  %-14s %s\n' "$tool" "$(command -v "$tool" || echo 'NOT FOUND')"
 done
 printf '  %-14s %s\n' "whisper" "$(command -v whisper-cli || command -v whisper || echo 'NOT FOUND')"
 
-echo
-echo "[setup] downloading the Hy-MT2 model (~440 MB) + whisper model…"
-npm install -g . 2>/dev/null || npm install -g "$(dirname "$0")/.."
-arabic-subs setup
+# ── 5. models — only with the user's permission ────────────────────────────
+step "models (Hy-MT2 440 MB + whisper 150 MB)"
+echo "[setup]   Hy-MT2 model card: https://huggingface.co/tencent/Hy-MT2-1.8B"
+echo "[setup]   both models feed ONE engine: subtitles and audio alike"
+echo "[setup]   stored in: \$HOME/.arabic-subs/models (download once, reused forever)"
+
+ANSWER=""
+if [ "$WANT_YES" -eq 1 ]; then
+    ANSWER=y
+elif [ -t 0 ]; then
+    printf '[setup]   Download now? [y/N] '
+    read -r ANSWER || ANSWER=""
+else
+    echo "[setup]   not a terminal — nothing downloaded."
+fi
+
+case "$ANSWER" in
+    y|Y|yes|YES)
+        npm install -g "$ROOT" || true
+        if command -v arabic-subs >/dev/null 2>&1; then
+            arabic-subs setup
+        else
+            node "$ROOT/bin/arabic-subs.js" setup
+        fi
+        ;;
+    *)
+        echo "[setup]   models skipped. Download them later with:"
+        echo "[setup]     node bin/arabic-subs.js setup"
+        echo "[setup]   (run will ask again before downloading)"
+        ;;
+esac
 
 echo
 echo "[setup] done. Start the engine with:"
-echo "  arabic-subs run --media /sdcard/Movies"
+echo "  node bin/arabic-subs.js run --media /sdcard/Movies"

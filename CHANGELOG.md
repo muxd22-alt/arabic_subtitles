@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.1.1 — permission-gated downloads, idempotent setup
+
+### Engine (`arabic-subs run` / `translate`)
+
+- **Downloads now ask first.** Nothing is fetched silently: the engine lists what
+  is missing (size + Hugging Face page), then asks `Download now? [y/N]`.
+  `--yes` allows it up front, `--no-download` forbids it. With no terminal it
+  explains both options instead of hanging.
+- **One model for every source.** English subtitles, embedded tracks and
+  whisper output are all translated by the same Hy-MT2 model — only the way the
+  text is obtained differs per video. The stage log now shows it:
+  `[Stage] x.mkv → translate (audio) (642 cues)`.
+- `run` no longer aborts on a missing model: it offers the download, resumes a
+  partial one, and only fails if the user says no or the transfer breaks.
+- Missing `llama-server` now prints the fix (`bash scripts/setup-termux.sh` and
+  `pkg upgrade -y` for the broken-cmake case) instead of a bare stack error.
+- Missing whisper no longer blocks startup: it warns that videos without
+  subtitles will be skipped and downloads `ggml-base` after permission.
+- New `--yes` / `--no-download` flags (documented in `help`).
+
+### Termux bootstrap (`scripts/setup-termux.sh`)
+
+- Fully idempotent: storage link, packages, llama-server, whisper and models are
+  each skipped with `already … — skipping` when present, so a second run looks
+  exactly like the first one (no more `~/storage already exists` rebuild prompts).
+- Repairs `CANNOT LINK EXECUTABLE "cmake" … missing symbol` by upgrading the
+  toolchain and reinstalling `cmake + libc++ before building from source.
+- Asks permission before the ~590 MB of model downloads; `--yes` skips the
+  question; non-interactive runs download nothing and say how to do it later.
+
+### App
+
+- Wizard commands are now one-liners that skip what is already done, so
+  re-running the wizard never hits "directory already exists" / "destination
+  path already exists" / "already the newest version" surprises.
+- The wizard auto-opens only the first time — finishing the last step records
+  it (`setup_done`), after which it stays behind the dashboard button and the
+  list icon.
+- `versionCode 3`, `versionName 1.1.1`.
+
 ## 1.1.0 — Termux step-by-step wizard + Thmanyah landing page
 
 ### App (Android)

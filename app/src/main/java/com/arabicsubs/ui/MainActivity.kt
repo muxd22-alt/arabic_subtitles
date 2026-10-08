@@ -74,6 +74,9 @@ class MainActivity : ComponentActivity() {
     private var showWizard by mutableStateOf(false)
     private var autoCopy by mutableStateOf(true)
 
+    // the wizard only auto-opens the very first time, never again after "تم"
+    private val prefs by lazy { getSharedPreferences("arabic_subs", Context.MODE_PRIVATE) }
+
     // engine status polled from the node status server (127.0.0.1:18435)
     private var engineState by mutableStateOf<EngineStatus?>(null)
     private var statusJob: Job? = null
@@ -127,7 +130,7 @@ class MainActivity : ComponentActivity() {
                                         color = Gold500.copy(alpha = 0.15f),
                                     ) {
                                         Text(
-                                            "v1.1.0",
+                                            "v1.1.1",
                                             color = Gold500,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
@@ -161,7 +164,8 @@ class MainActivity : ComponentActivity() {
                                 mediaPaths = folders.map { it.rawPath },
                                 autoCopy = autoCopy,
                                 onAutoCopyChange = { autoCopy = it },
-                                onDismiss = { showWizard = false }
+                                onDismiss = { showWizard = false },
+                                onCompleted = { prefs.edit().putBoolean("setup_done", true).apply() }
                             )
                         }
                     }
@@ -240,8 +244,8 @@ class MainActivity : ComponentActivity() {
             )
         )
         scanFolders()
-        // first folder chosen → walk the user through Termux, line by line
-        if (firstFolder) showWizard = true
+        // first folder ever chosen → walk the user through Termux, line by line
+        if (firstFolder && !prefs.getBoolean("setup_done", false)) showWizard = true
     }
 
     // ── Engine launch ─────────────────────────────────────────────────
@@ -610,6 +614,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun TermuxSetupDialog(onDismiss: () -> Unit) {
         val context = LocalContext.current
+        // same idempotent commands as the wizard — one source of truth
+        val foldersKey = folders.joinToString { it.rawPath }
+        val steps = remember(foldersKey) { buildWizardSteps(folders.map { it.rawPath }) }
 
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -647,11 +654,9 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    item { SetupStep("1️⃣  منح إذن التخزين", "termux-setup-storage", context) }
-                    item { SetupStep("2️⃣  تثبيت الحزمة", "pkg update && pkg install nodejs ffmpeg -y", context) }
-                    item { SetupStep("3️⃣  تحميل المشروع", "git clone https://github.com/muxd22-alt/arabic_subtitles.git && cd arabic_subtitles && npm install", context) }
-                    item { SetupStep("4️⃣  الإعداد (تحميل النماذج)", "cd ~/arabic_subtitles && bash scripts/setup-termux.sh", context) }
-                    item { SetupStep("5️⃣  تشغيل المحرك", buildRunCommand(), context) }
+                    steps.forEachIndexed { i, step ->
+                        item { SetupStep("${i + 1}️⃣  ${step.title}", step.command, context) }
+                    }
                 }
             },
             confirmButton = {

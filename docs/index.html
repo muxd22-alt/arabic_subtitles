@@ -89,7 +89,7 @@
       <div class="feature-card">
         <div class="feature-icon">🧭</div>
         <h3>دليل خطوة بخطوة</h3>
-        <p>التطبيق يمشي معك سطراً بسطر داخل تيرمكس: نسخ تلقائي للأوامر وتشغيل مباشر بضغطة واحدة.</p>
+        <p>التطبيق يمشي معك سطراً بسطر داخل تيرمكس: نسخ تلقائي للأوامر، وتشغيل مباشر بضغطة واحدة، ويتجاهل ما تم إنجازه مسبقاً.</p>
       </div>
 
       <div class="feature-card">
@@ -139,17 +139,20 @@
         <i class="dot r"></i><i class="dot y"></i><i class="dot g"></i>
         <span>install</span>
       </div>
-      <pre><span class="dim"># 1. الإذن + الحزم</span>
-<span class="cmd">$</span> termux-setup-storage
-<span class="cmd">$</span> pkg update && pkg install nodejs ffmpeg -y
+      <pre><span class="dim"># 1. الحزم</span>
+<span class="cmd">$</span> pkg install nodejs ffmpeg git -y
 
-<span class="dim"># 2. المشروع + النماذج (~440MB)</span>
+<span class="dim"># 2. المشروع (يتخطّى git clone إن كان موجوداً)</span>
 <span class="cmd">$</span> git clone https://github.com/muxd22-alt/arabic_subtitles.git
 <span class="cmd">$</span> cd arabic_subtitles && npm install
+
+<span class="dim"># 3. الأدوات — آمن لإعادة التشغيل، يتجاهل ما هو جاهز</span>
 <span class="cmd">$</span> bash scripts/setup-termux.sh
 
-<span class="dim"># 3. التشغيل</span>
-<span class="cmd">$</span> node bin/arabic-subs.js run --media /sdcard/Movies</pre>
+<span class="dim"># 4. التشغيل — يسأل قبل تنزيل النماذج (~590MB)</span>
+<span class="cmd">$</span> node bin/arabic-subs.js run --media /sdcard/Movies
+<span class="dim">[Engine]   Hy-MT2-1.8B (1.25-bit GGUF)  440 MB  huggingface.co/tencent/Hy-MT2-1.8B-1.25Bit-GGUF</span>
+<span class="dim">[Engine] Download now? [y/N]</span> <span class="ok">y</span></pre>
     </div>
 
     <p class="note">
@@ -159,7 +162,7 @@
 
     <div class="apk-card">
       <div class="meta">
-        <h3>تطبيق المرافق Android <span class="chip">v1.1.0</span></h3>
+        <h3>تطبيق المرافق Android <span class="chip">v1.1.1</span></h3>
         <p>اختيار المجلدات، مسح الفيديوهات، دليل خطوة بخطوة مع نسخ تلقائي، وتشغيل المحرك وحالته المباشرة.</p>
       </div>
       <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn btn-gold">⬇ تنزيل APK</a>

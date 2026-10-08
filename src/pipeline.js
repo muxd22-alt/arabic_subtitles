@@ -182,7 +182,7 @@ async function processVideo(videoPath, options = {}) {
         throw new Error('translate requested but no llama server provided');
     }
 
-    options.onStage && options.onStage({ stage: 'translate', cueCount: cues.length });
+    options.onStage && options.onStage({ stage: 'translate', cueCount: cues.length, source: origin });
     const { cues: translated, stats } = await translateCues(cues, server, options);
 
     const validation = validateSRT(

@@ -39,7 +39,11 @@ data class WizardStep(
 )
 
 /**
- * The full onboarding script: one command per step, always LTR.
+ * The onboarding script: one command per step, always LTR.
+ *
+ * Every command is idempotent — running the wizard a second time (or the same
+ * step twice) reports "already done" instead of prompting again, so the flow
+ * never looks different from what the user saw the first time.
  * The last step is rebuilt from whatever folders the user picked.
  */
 fun buildWizardSteps(mediaPaths: List<String>): List<WizardStep> {
@@ -49,22 +53,22 @@ fun buildWizardSteps(mediaPaths: List<String>): List<WizardStep> {
     return listOf(
         WizardStep(
             title = "منح إذن التخزين",
-            hint = "يسمح لتيرمكس بالوصول إلى ملفات الفيديو في ذاكرة الهاتف.",
-            command = "termux-setup-storage"
+            hint = "مرة واحدة فقط. إن رأيت \"directory '~/storage' already exists\" اكتب n — الإذن ممنوح أصلاً.",
+            command = "[ -e ~/storage/shared ] && echo \"storage: already linked\" || termux-setup-storage"
         ),
         WizardStep(
             title = "تثبيت الحزم المطلوبة",
-            hint = "Node.js لتشغيل المحرك و ffmpeg لاستخراج الصوت.",
-            command = "pkg update && pkg install nodejs ffmpeg -y"
+            hint = "Node.js لتشغيل المحرك و ffmpeg لاستخراج الصوت — يتجاهل ما هو مثبت بالفعل.",
+            command = "pkg install -y nodejs ffmpeg"
         ),
         WizardStep(
             title = "تحميل المشروع",
-            hint = "ينسخ الكود ويثبّت الحزم (لا توجد تبعيات خارجية).",
-            command = "git clone https://github.com/muxd22-alt/arabic_subtitles.git && cd arabic_subtitles && npm install"
+            hint = "يتخطّى git clone إذا كان المجلد موجوداً، ثم يثبّت الحزم.",
+            command = "[ -d ~/arabic_subtitles ] || git clone https://github.com/muxd22-alt/arabic_subtitles.git; cd ~/arabic_subtitles && npm install"
         ),
         WizardStep(
-            title = "تحميل النماذج",
-            hint = "يجلب نموذج Hy-MT2 (~440MB) ونموذج whisper — يستغرق دقائق حسب سرعة الشبكة.",
+            title = "الأدوات والنماذج",
+            hint = "يثبّت llama-server و whisper وينزّل النماذج (~590MB) بعد موافقتك — يتخطّى ما هو جاهز.",
             command = "cd ~/arabic_subtitles && bash scripts/setup-termux.sh"
         ),
         WizardStep(
@@ -101,7 +105,8 @@ fun SetupWizard(
     mediaPaths: List<String>,
     autoCopy: Boolean,
     onAutoCopyChange: (Boolean) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onCompleted: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val steps = remember(mediaPaths) { buildWizardSteps(mediaPaths) }
@@ -284,8 +289,10 @@ fun SetupWizard(
                 }
                 Button(
                     onClick = {
-                        if (isLast) onDismiss()
-                        else {
+                        if (isLast) {
+                            onCompleted()
+                            onDismiss()
+                        } else {
                             index++
                             launchedTermux = false
                         }
