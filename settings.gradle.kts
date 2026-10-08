@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "SubArabify"
+rootProject.name = "ArabicSubs"
 include(":app")

@@ -1,112 +1,126 @@
-# <img src="app/icon/SubArabify.png" width="48" align="center" /> SubArabify
+# Arabic Subs (عربي سبس)
 
-SubArabify is an automated background worker that finds ready-made **Arabic subtitles** for your movies and TV episodes, brands them, and saves them next to the video — entirely on-device, with zero backend infrastructure and **no AI services**. It leans on the free [OpenSubtitles.com](https://www.opensubtitles.com/) REST API (movie-hash search) and reads only your media folder.
+Fully **offline EN→AR subtitle factory** for your phone. Point it at your Movies /
+TV Shows folder and it produces `Movie.ArabicSubs.ar.srt` next to every video —
+translated on-device by **Tencent Hy-MT2** (1.8B, 1.25-bit GGUF, ~440 MB) running
+in llama.cpp, with **ffmpeg + whisper.cpp** handling videos that have no English
+subtitle at all.
 
-AI translation and audio transcription have been **removed**: if a ready-made Arabic subtitle exists (locally or on OpenSubtitles), SubArabify uses it; if it doesn't, the video is logged and skipped.
+No cloud APIs, no accounts, no telemetry. Built for **Termux on Android (arm64)**
+and any Linux/macOS box with Node 18+.
 
-## Features
+## How it works
 
-- **Subtitle-first pipeline (v3):** local Arabic → OpenSubtitles Arabic → skip (with a logged reason). No AI, no audio extraction, no API costs.
-- **OpenSubtitles hash search:** computes the OpenSubtitles movie hash (size + first/last 64 KB) and searches by `moviehash`, falling back to title+year — implemented as a plain REST client, no heavy libraries.
-- **Release-name identification:** parses names like `Interstellar.2014.1080p.BluRay.x264-SPARKS.mkv` into title + year (via `parse-torrent-title`) so hash/title searches are accurate — including Arabic file names.
-- **Smart Branding:** watermarks output subtitles with `[ ترجمت الأداة ساب أرابيفاي ]` and writes them as `MovieName.SubArabify.ar.srt`.
-- **Decision log:** every per-movie decision (identified title/year, hash vs. title match, provider, why a video was skipped) is appended to `logs/decisions.jsonl`.
-- **Runs Everywhere:** designed to run on Termux (Android/ARM64) or any standard Node.js environment — pure JS, no native modules.
+For every video the engine picks the first source that applies:
 
----
+| # | Source | What happens |
+|---|--------|--------------|
+| 1 | `Movie.ArabicSubs.ar.srt` already exists | skip (idempotent) |
+| 2 | an Arabic subtitle next to the video | brand it and save — no model load |
+| 3 | an English subtitle next to the video | translate cue-by-cue with Hy-MT2 |
+| 4 | embedded English subtitle track | same as (3) |
+| 5 | nothing — but audio exists | ffmpeg chunk extraction → whisper.cpp → Hy-MT2 |
+| 6 | none of the above | skipped, reason logged |
 
-## Subtitle lookup order
+Every decision lands in `logs/decisions.jsonl`.
 
-For every new video, SubArabify tries these in order and stops at the first hit:
+### Performance design
 
-1. **Existing output** — `MovieName.SubArabify.ar.srt` already present → skip (idempotent).
-2. **Local Arabic** — `MovieName.ar.srt` / `MovieName.arabic.srt` / any same-named subtitle whose *content* is Arabic → brand it and save.
-3. **OpenSubtitles (Arabic)** — moviehash search first, then title+year search → download, validate, brand.
-4. **English subtitle found** — logged as `skip-english` (AI translation was removed) → video left untouched.
-5. **Nothing found** — logged as `no-subtitle` → video left untouched.
+- **Parallel translation chunks** — cues are batched (≤16 lines / ≤800 chars)
+  and sent to `llama-server` through a 4-way pool. Each batch is validated
+  (must come back Arabic); a bad batch is split in half and retried.
+- **Parallel audio chunks** — the timeline is cut into 5-minute windows with a
+  1-second overlap, extracted and transcribed concurrently (2 workers), then
+  merged by midpoint ownership so overlap cues never duplicate.
+- **Sequential video queue** — one video at a time keeps the phone cool while
+  chunks inside each video run in parallel.
+- **Resumable model downloads** — Range-request resume from `.part` files, so a
+  dropped connection never restarts a 440 MB transfer.
 
-Every candidate is validated before use: it must parse as SRT, keep sane cue counts against the runtime, and be normalized to UTF-8 (BOM/UTF-16 handled).
+## Quick start (Termux)
 
----
-
-## 🚀 Getting Started on Termux (Android)
-
-You can run the SubArabify engine directly on your Android phone using standard Node.js tools in Termux.
-
-### 1. Grant Storage Access
-Allow Termux to read and write to your phone's media storage:
 ```bash
+# 1. install Termux from F-Droid (not Play Store)
+# 2. grant storage access
 termux-setup-storage
-```
 
-### 2. Install Dependencies (Node.js & FFmpeg)
-```bash
+# 3. clone + install
 pkg update && pkg install nodejs ffmpeg -y
-```
-Node.js powers the app; FFmpeg is only used for `ffprobe` (reading a video's runtime so subtitle cue counts can be sanity-checked — the app still works without it).
-
-### 3. Setup Project
-Clone the repository and install the NPM packages:
-```bash
-git clone https://github.com/muxd22-alt/SubArabify.git
-cd SubArabify
+git clone https://github.com/muxd22-alt/arabic_subtitles.git
+cd arabic_subtitles
 npm install
+
+# 4. full bootstrap: llama-server + whisper.cpp + model downloads
+bash scripts/setup-termux.sh
+
+# 5. run the engine over your media folders
+node bin/arabic-subs.js run --media /sdcard/Movies --media /sdcard/TV Shows
 ```
 
-### 4. Add your API key (optional but recommended)
-```bash
-cp .env.example .env
-nano .env
+The APK (`app/`) is a companion UI: pick Movies/TV Shows folders, see which
+videos are still missing Arabic subtitles, launch the engine through Termux's
+`RUN_COMMAND` intent, and watch live progress — the engine serves a status API
+on `http://127.0.0.1:18435/status` that the app polls.
+
+## CLI
+
+```text
+arabic-subs setup                      # download Hy-MT2 + whisper models
+arabic-subs run --media <dir>          # watch folders, translate everything
+arabic-subs translate file.srt …       # one-shot SRT translation
+arabic-subs transcribe video.mkv …     # audio → English SRT
+arabic-subs scan [dir] …               # list videos + which source each uses
+arabic-subs status                     # engine/model status JSON
+arabic-subs log                        # recent decisions
 ```
 
-| Variable | Required for | Where to get it |
-|---|---|---|
-| `OPENSUBTITLES_API_KEY` | Remote Arabic subtitle search | Free consumer key: <https://www.opensubtitles.com/en/users/sign_up> → API section |
-| `OPENSUBTITLES_USERNAME` / `OPENSUBTITLES_PASSWORD` | Optional: unlocks the OpenSubtitles download quota (JWT) | Same account as above |
-| `TMDB_API_KEY` | Reserved for the upcoming genre-aware brief | Free v3 key: <https://www.themoviedb.org/settings/api> |
+## Requirements
 
-Without `OPENSUBTITLES_API_KEY`, SubArabify still works — it just searches your local files only and skips remote lookup. CI stores these keys as the `OpenSubtitles` and `TMDBAPI` repository secrets. There are no other AI services or tokens: nothing else to configure.
+| Tool | Why | Termux |
+|------|-----|--------|
+| Node 18+ | engine | `pkg install nodejs` |
+| ffmpeg / ffprobe | audio chunks, duration probing | `pkg install ffmpeg` |
+| llama-server | serves Hy-MT2 | `pkg install llama-cpp` |
+| whisper-cli | speech → text for subtitle-less videos | build via `scripts/setup-termux.sh` |
 
-### 5. Run SubArabify!
-Run the node script and point it to your phone's movie folder:
-```bash
-npm start -- --media ~/storage/shared/Movies
-```
-Or run directly:
-```bash
-node subarabify.js --media ~/storage/shared/Movies
-```
+Without ffmpeg/whisper the engine still translates any existing English
+subtitle — the audio path simply reports `no-subtitle-or-audio`.
 
-The script will now actively watch the destination folder. Whenever a `.mp4`, `.mkv`, `.avi` or `.m4v` file is added, it identifies the release name (title + year), looks for a ready-made Arabic subtitle in the order described above, brands it, and records every decision in `logs/decisions.jsonl`.
+## Configuration
 
----
+Everything has a default; override with env vars or a `.env` file:
 
-## Manual test plan
+| Var | Default | Meaning |
+|-----|---------|---------|
+| `HYMT2_MODEL` | `~/.arabic-subs/models/Hy-MT2-1.8B-1.25Bit.gguf` | model path |
+| `WHISPER_MODEL` | `base` | whisper.cpp model size |
+| `LLAMA_PORT` | `18434` | llama-server port |
+| `STATUS_PORT` | `18435` | status API port |
+| `LLAMA_BASE_URL` | *(spawn local)* | use an already-running server |
+| `TRANSLATE_CONCURRENCY` | `4` | parallel translation requests |
+| `TRANSLATE_BATCH_LINES` / `BATCH_CHARS` | `16` / `800` | batch size |
+| `AUDIO_CONCURRENCY` | `2` | parallel ffmpeg/whisper workers |
+| `AUDIO_CHUNK_MINUTES` | `5` | audio chunk length |
+| `NGL` / `THREADS` | auto | GPU layers / CPU threads for llama.cpp |
 
-Run these against a folder with at least **two different genres** of movies:
+## Output
 
-1. **Identification** — drop in e.g. `Interstellar.2014.1080p.BluRay.x264-SPARKS.mkv` (sci-fi) and `Zombieland.2009.720p.BluRay.x264-REFINE.mkv` (horror). The log should show `Identified: "Interstellar" (2014)` and `Identified: "Zombieland" (2009)` — release noise (`1080p`, `BluRay`, `x264`, group name) must not leak into the title.
-2. **Local Arabic is branded, nothing else runs** — place `SomeMovie.2020.1080p.ar.srt` next to `SomeMovie.2020.1080p.mkv` (no `.SubArabify` output yet). Processing must write `SomeMovie.2020.1080p.SubArabify.ar.srt` with the watermark `[ ترجمت الأداة ساب أرابيفاي ]` and log `brand-arabic` — no translation or network call may appear.
-3. **OpenSubtitles fetch** — with `OPENSUBTITLES_API_KEY` set, remove any local `.srt` for a movie that exists on OpenSubtitles. The log should show `remote-ar | search | N hit(s) | hash` (or `title`), then a branded Arabic subtitle. `logs/decisions.jsonl` records the `fileId`, `moviehashMatch`, and remaining download quota.
-4. **No-key degradation** — unset the key and repeat step 3: the run must log `remote | skipped | no OPENSUBTITLES_API_KEY` and proceed without crashing.
-5. **English-only and no-subtitle videos are skipped cleanly** — a video whose only subtitle is English must log `skip-english` and leave no output; a video with no subtitle at all must log `no-subtitle`. Neither may crash or touch the file.
-
----
+- Files: `MovieName.ArabicSubs.ar.srt` (sidecar, never touches the video)
+- Watermark: first cue is `[ ترجمت الأداة عربي سبس ]`
+- Log: `logs/decisions.jsonl` — one JSON object per decision
 
 ## Development
 
 ```bash
-npm test          # node --test: identifier, OSHash vectors, SRT utils, finder, pipeline
+npm test          # node --test — 62 tests, no network, no model needed
 ```
 
-The hash tests assert against the canonical OpenSubtitles test vectors published by [opensubtitles/oshash](https://github.com/opensubtitles/oshash); regenerate the fixtures with `python test/fixtures/generate_fixtures.py`.
+The suite covers SRT parsing/validation/encoding detection, batch chunking and
+retry logic, the per-video pipeline (against a fake engine), the download
+resumer (against a local HTTP server), the job queue/watcher, audio chunk
+planning and overlap merging, and the status API. ffmpeg/whisper/llama-server
+are never invoked.
 
-## Dependencies
+## License
 
-- **Node.js** (v18+, global `fetch` required)
-- **FFmpeg** (optional, runtime probing only)
-- **chokidar**: efficient local folder monitoring.
-- **parse-torrent-title**: proven release-name parser (MIT, pure JS).
-
----
-*Created by [the SubArabify community](https://github.com/muxd22-alt).*
+MIT

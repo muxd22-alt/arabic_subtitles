@@ -1,4 +1,4 @@
-package com.subarabify.ui.theme
+package com.arabicsubs.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val SubArabifyColorScheme = darkColorScheme(
+private val ArabicSubsColorScheme = darkColorScheme(
     primary            = Gold500,
     onPrimary          = DarkBg,
     primaryContainer   = Gold700,
@@ -31,7 +31,7 @@ private val SubArabifyColorScheme = darkColorScheme(
 )
 
 @Composable
-fun SubArabifyTheme(content: @Composable () -> Unit) {
+fun ArabicSubsTheme(content: @Composable () -> Unit) {
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
@@ -43,8 +43,8 @@ fun SubArabifyTheme(content: @Composable () -> Unit) {
     }
 
     MaterialTheme(
-        colorScheme = SubArabifyColorScheme,
-        typography = SubArabifyTypography,
+        colorScheme = ArabicSubsColorScheme,
+        typography = ArabicSubsTypography,
         content = content,
     )
 }

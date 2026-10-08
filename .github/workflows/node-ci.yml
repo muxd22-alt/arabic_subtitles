@@ -23,10 +23,5 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    # The OpenSubtitles/TMDB secrets power the live contract tests; when they
-    # are absent those tests skip themselves instead of failing the build.
     - name: Run test suite
       run: npm test
-      env:
-        OPENSUBTITLES_API_KEY: ${{ secrets.OpenSubtitles }}
-        TMDB_API_KEY: ${{ secrets.TMDBAPI }}

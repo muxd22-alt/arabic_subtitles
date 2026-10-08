@@ -350,3 +350,120 @@ footer a:hover {
     font-size: 3.5rem;
   }
 }
+
+/* ── Arabic Subs additions ─────────────────────────────── */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+  max-width: 1200px;
+  margin: 40px auto 0;
+  padding: 0 24px 80px;
+}
+
+.feature-card {
+  background: rgba(30, 30, 30, 0.8);
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 28px;
+  text-align: center;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--red);
+}
+
+.feature-icon { font-size: 2.2rem; margin-bottom: 12px; }
+.feature-card h3 { font-size: 1.4rem; margin-bottom: 10px; }
+.feature-card p { color: var(--gray); line-height: 1.6; font-size: 1rem; }
+
+.features h2, .pipeline h2, .install h2 {
+  text-align: center;
+  font-size: 3rem;
+  padding-top: 80px;
+}
+
+.pipeline, .install { padding-bottom: 60px; }
+
+.pipeline-steps {
+  max-width: 800px;
+  margin: 30px auto;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.step {
+  background: #1c1c1c;
+  border: 1px solid #333;
+  border-right: 4px solid var(--red);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-size: 1.05rem;
+}
+
+.pipeline pre, .install pre {
+  max-width: 860px;
+  margin: 24px auto;
+  background: #0d0d0d;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  padding: 20px;
+  overflow-x: auto;
+  color: #7ee787;
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.install .note {
+  text-align: center;
+  color: var(--gray);
+  max-width: 700px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+.install .note a { color: var(--red); }
+
+footer {
+  border-top: 1px solid #2a2a2a;
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--gray);
+}
+
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.footer-links a {
+  color: var(--light);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.footer-links a:hover { color: var(--red); }
+
+.hero-buttons { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+.btn-secondary {
+  border: 1px solid var(--light);
+  color: var(--light);
+  padding: 10px 20px;
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: 4px;
+}
+.btn-secondary:hover { background: rgba(255,255,255,0.1); }
+
+@media (max-width: 768px) {
+  .hero h1 { font-size: 3rem; }
+  .features h2, .pipeline h2, .install h2 { font-size: 2.2rem; }
+}

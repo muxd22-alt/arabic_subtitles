@@ -1,17 +1,31 @@
 {
-  "name": "subarabify",
-  "version": "3.0.2-beta",
-  "description": "SubArabify — subtitle-first Arabic branding pipeline (no AI)",
-  "main": "subarabify.js",
+  "name": "arabic-subs",
+  "version": "1.0.0",
+  "description": "Arabic Subs — offline EN→AR subtitle factory for Termux powered by Hy-MT2 (llama.cpp), ffmpeg and whisper.cpp",
+  "main": "src/pipeline.js",
+  "bin": {
+    "arabic-subs": "bin/arabic-subs.js"
+  },
   "scripts": {
-    "start": "node subarabify.js",
+    "start": "node bin/arabic-subs.js run --media /sdcard/Movies",
+    "setup": "node bin/arabic-subs.js setup",
     "test": "node --test"
   },
-  "dependencies": {
-    "chokidar": "^3.6.0",
-    "parse-torrent-title": "^3.0.1"
+  "engines": {
+    "node": ">=18"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "keywords": [
+    "subtitles",
+    "arabic",
+    "translation",
+    "hy-mt2",
+    "llama.cpp",
+    "termux",
+    "whisper",
+    "ffmpeg"
+  ],
+  "author": "muxd22-alt",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
 }

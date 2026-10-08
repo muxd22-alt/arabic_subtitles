@@ -1,149 +1,177 @@
 const test = require('node:test');
-const assert = require('node:assert/strict');
+const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+
 const {
-    processVideoFile,
-    setSubtitleFinder,
-    findSubtitle,
-    identifyMovie
-} = require('../subarabify.js');
-const { WATERMARK_TEXT, parseSRT } = require('../srt-utils.js');
+    outputPathFor,
+    listSubtitleSiblings,
+    findSubtitleSource,
+    isDone,
+    translateCues,
+    processVideo
+} = require('../src/pipeline.js');
+const { WATERMARK_TEXT, parseSRT, validateSRT } = require('../src/srt.js');
+
+function tmpDir() {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'arabicsubs-test-'));
+}
 
 const EN_SRT = `1
 00:00:01,000 --> 00:00:03,000
-We need to leave before sunrise.
+Hello my friend
 
 2
 00:00:04,000 --> 00:00:06,000
-You said we had time.`;
+How are you today
+`;
 
 const AR_SRT = `1
 00:00:01,000 --> 00:00:03,000
-يجب أن نغادر قبل شروق الشمس.
+مرحبا يا صديقي
 
 2
 00:00:04,000 --> 00:00:06,000
-قلتَ إن لدينا وقتاً.`;
+كيف حالك اليوم
+`;
 
-const VIDEO = 'Zombieland.2009.720p.BluRay.x264-REFINE.mkv';
-
-function makeDir() {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sab-pipeline-'));
-    process.env.SUBARABIFY_DECISION_LOG = path.join(dir, 'decisions.jsonl');
-    return dir;
+function fakeServer() {
+    return {
+        async translate(texts) {
+            return texts.map((t, i) => `مرحبا رقم ${i} من النص`);
+        }
+    };
 }
 
-function makeVideo(dir) {
-    const file = path.join(dir, VIDEO);
-    fs.writeFileSync(file, Buffer.alloc(140000, 2));
-    return file;
-}
-
-function readDecisions(dir) {
-    const p = path.join(dir, 'decisions.jsonl');
-    if (!fs.existsSync(p)) return [];
-    return fs.readFileSync(p, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
-}
-
-function restoreHooks() {
-    setSubtitleFinder(findSubtitle);
-}
-
-test('an existing branded output is skipped without touching the finder', async () => {
-    const dir = makeDir();
-    const video = makeVideo(dir);
-    const base = path.basename(video, '.mkv');
-    fs.writeFileSync(path.join(dir, `${base}.SubArabify.ar.srt`), AR_SRT, 'utf8');
-
-    let finderCalled = false;
-    setSubtitleFinder(async () => { finderCalled = true; return null; });
-
-    await processVideoFile(video);
-    assert.equal(finderCalled, false);
-    restoreHooks();
-    fs.rmSync(dir, { recursive: true, force: true });
+test('outputPathFor uses the ArabicSubs suffix', () => {
+    const p = outputPathFor('/movies/Show/S01E01.mkv');
+    assert.strictEqual(path.basename(p), 'S01E01.ArabicSubs.ar.srt');
 });
 
-test('ready-made Arabic subtitle is branded and never translated (real finder)', async () => {
-    const dir = makeDir();
-    const video = makeVideo(dir);
-    const base = path.basename(video, '.mkv');
-    fs.writeFileSync(path.join(dir, `${base}.ar.srt`), AR_SRT, 'utf8');
+test('listSubtitleSiblings finds exact and language-tagged matches only', () => {
+    const dir = tmpDir();
+    fs.writeFileSync(path.join(dir, 'movie.mkv'), '');
+    fs.writeFileSync(path.join(dir, 'movie.srt'), EN_SRT);
+    fs.writeFileSync(path.join(dir, 'movie.en.srt'), EN_SRT);
+    fs.writeFileSync(path.join(dir, 'unrelated.srt'), EN_SRT);
 
-    setSubtitleFinder(findSubtitle); // real finder: local Arabic short-circuits before any network use
-
-    await processVideoFile(video);
-
-    const outPath = path.join(dir, `${base}.SubArabify.ar.srt`);
-    assert.ok(fs.existsSync(outPath), 'branded output should exist');
-    const out = fs.readFileSync(outPath, 'utf8');
-    assert.ok(out.includes(WATERMARK_TEXT));
-    assert.ok(!out.includes('Puter'), 'watermark must no longer claim Puter.js');
-    assert.equal(parseSRT(out).length, 3); // watermark + 2 source cues
-
-    const action = readDecisions(dir).find((d) => d.action === 'brand-arabic');
-    assert.ok(action, 'expected a brand-arabic decision');
-    assert.equal(action.language, 'ar');
-    assert.equal(action.source, 'local');
-    restoreHooks();
-    fs.rmSync(dir, { recursive: true, force: true });
+    const found = listSubtitleSiblings(path.join(dir, 'movie.mkv')).map((f) => path.basename(f));
+    assert.deepStrictEqual(found.sort(), ['movie.en.srt', 'movie.srt'].sort());
 });
 
-test('ready-made English subtitle is skipped with a decision (no AI translation)', async () => {
-    const dir = makeDir();
-    const video = makeVideo(dir);
-    const base = path.basename(video, '.mkv');
-    const enPath = path.join(dir, `${base}.srt`);
-    fs.writeFileSync(enPath, EN_SRT, 'utf8');
+test('findSubtitleSource classifies arabic vs english', () => {
+    const dir = tmpDir();
+    fs.writeFileSync(path.join(dir, 'a.mkv'), '');
+    fs.writeFileSync(path.join(dir, 'a.srt'), EN_SRT);
+    assert.strictEqual(findSubtitleSource(path.join(dir, 'a.mkv')).kind, 'english');
 
-    const outPath = path.join(dir, `${base}.SubArabify.ar.srt`);
-    setSubtitleFinder(async () => ({
-        status: 'found', language: 'en', source: 'local', match: 'local', provider: null,
-        path: enPath, cueCount: 2, movie: identifyMovie(base), hash: '0'.repeat(16), decisions: []
-    }));
+    fs.writeFileSync(path.join(dir, 'b.mkv'), '');
+    fs.writeFileSync(path.join(dir, 'b.srt'), AR_SRT);
+    assert.strictEqual(findSubtitleSource(path.join(dir, 'b.mkv')).kind, 'arabic');
 
-    await processVideoFile(video);
-
-    assert.ok(!fs.existsSync(outPath), 'English-only videos must produce no output without AI');
-    const decision = readDecisions(dir).find((d) => d.action === 'skip-english');
-    assert.ok(decision, 'expected a skip-english decision');
-    assert.equal(decision.language, 'en');
-    restoreHooks();
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.writeFileSync(path.join(dir, 'c.mkv'), '');
+    assert.strictEqual(findSubtitleSource(path.join(dir, 'c.mkv')).kind, 'none');
 });
 
-test('no ready-made subtitle anywhere produces no output and logs it', async () => {
-    const dir = makeDir();
-    const video = makeVideo(dir);
-    const base = path.basename(video, '.mkv');
-
-    setSubtitleFinder(async () => ({
-        status: 'not_found', language: null, source: null, match: null, provider: null,
-        path: null, movie: identifyMovie(base), hash: '0'.repeat(16), decisions: []
-    }));
-
-    await processVideoFile(video);
-
-    assert.ok(!fs.existsSync(path.join(dir, `${base}.SubArabify.ar.srt`)), 'no audio fallback anymore');
-    assert.ok(readDecisions(dir).some((d) => d.action === 'no-subtitle'));
-    restoreHooks();
-    fs.rmSync(dir, { recursive: true, force: true });
+test('isDone detects an existing output', () => {
+    const dir = tmpDir();
+    const video = path.join(dir, 'v.mkv');
+    fs.writeFileSync(video, '');
+    assert.strictEqual(isDone(video), false);
+    fs.writeFileSync(outputPathFor(video), '1\n00:00:01,000 --> 00:00:02,000\nمرحبا\n');
+    assert.strictEqual(isDone(video), true);
 });
 
-test('a broken finder still degrades gracefully (no crash, no output)', async () => {
-    const dir = makeDir();
-    const video = makeVideo(dir);
+test('translateCues preserves timings and count', async () => {
+    const cues = validateSRT(EN_SRT).cues;
+    const { cues: out, stats } = await translateCues(cues, fakeServer());
+    assert.strictEqual(out.length, cues.length);
+    assert.strictEqual(out[0].start, cues[0].start);
+    assert.strictEqual(out[0].end, cues[0].end);
+    assert.match(out[0].text, /مرحبا رقم 0/);
+    assert.strictEqual(stats.total, 2);
+});
 
-    setSubtitleFinder(async () => { throw new Error('provider exploded'); });
+test('processVideo skips when the output already exists', async () => {
+    const dir = tmpDir();
+    const video = path.join(dir, 'done.mkv');
+    fs.writeFileSync(video, '');
+    fs.writeFileSync(outputPathFor(video), '1\n00:00:01,000 --> 00:00:02,000\nx\n');
 
-    await processVideoFile(video);
-    assert.ok(!fs.existsSync(path.join(dir, `${path.basename(video, '.mkv')}.SubArabify.ar.srt`)));
+    const res = await processVideo(video, { audio: false, log: () => { } });
+    assert.strictEqual(res.status, 'skipped');
+    assert.strictEqual(res.reason, 'existing-output');
+});
 
-    const decisions = readDecisions(dir);
-    assert.ok(decisions.some((d) => d.action === 'finder-error'));
-    assert.ok(decisions.some((d) => d.action === 'no-subtitle'));
-    restoreHooks();
-    fs.rmSync(dir, { recursive: true, force: true });
+test('processVideo brands a ready-made Arabic subtitle without the model', async () => {
+    const dir = tmpDir();
+    const video = path.join(dir, 'ar.mkv');
+    fs.writeFileSync(video, '');
+    fs.writeFileSync(path.join(dir, 'ar.srt'), AR_SRT);
+
+    const logged = [];
+    const res = await processVideo(video, { audio: false, log: (e) => logged.push(e) });
+
+    assert.strictEqual(res.status, 'branded');
+    assert.ok(fs.existsSync(outputPathFor(video)));
+    const out = parseSRT(fs.readFileSync(outputPathFor(video), 'utf8'));
+    assert.strictEqual(out[0].text, WATERMARK_TEXT);
+    assert.strictEqual(logged[0].action, 'brand-arabic');
+});
+
+test('processVideo translates an English subtitle through the fake server', async () => {
+    const dir = tmpDir();
+    const video = path.join(dir, 'en.mkv');
+    fs.writeFileSync(video, '');
+    fs.writeFileSync(path.join(dir, 'en.srt'), EN_SRT);
+
+    const res = await processVideo(video, {
+        audio: false,
+        server: fakeServer(),
+        log: () => { }
+    });
+
+    assert.strictEqual(res.status, 'translated');
+    assert.strictEqual(res.cueCount, 2);
+    const out = parseSRT(fs.readFileSync(outputPathFor(video), 'utf8'));
+    assert.strictEqual(out.length, 3);
+    assert.strictEqual(out[0].text, WATERMARK_TEXT);
+    assert.match(out[1].text, /مرحبا رقم 0/);
+    assert.match(out[2].text, /مرحبا رقم 1/);
+});
+
+test('processVideo skips when there is no subtitle and audio is disabled', async () => {
+    const dir = tmpDir();
+    const video = path.join(dir, 'bare.mkv');
+    fs.writeFileSync(video, '');
+
+    const res = await processVideo(video, { audio: false, log: () => { } });
+    assert.strictEqual(res.status, 'skipped');
+    assert.strictEqual(res.reason, 'no-subtitle');
+});
+
+test('processVideo fails loudly without a server when translation is needed', async () => {
+    const dir = tmpDir();
+    const video = path.join(dir, 'noserver.mkv');
+    fs.writeFileSync(video, '');
+    fs.writeFileSync(path.join(dir, 'noserver.srt'), EN_SRT);
+
+    await assert.rejects(
+        () => processVideo(video, { audio: false, server: null, log: () => { } }),
+        /no llama server/
+    );
+});
+
+test('processVideo logs a decision for every outcome', async () => {
+    const dir = tmpDir();
+    const video = path.join(dir, 'logged.mkv');
+    fs.writeFileSync(video, '');
+    fs.writeFileSync(path.join(dir, 'logged.srt'), EN_SRT);
+
+    const logged = [];
+    await processVideo(video, { audio: false, server: fakeServer(), log: (e) => logged.push(e) });
+    assert.strictEqual(logged.length, 1);
+    assert.strictEqual(logged[0].action, 'translate');
+    assert.strictEqual(logged[0].source, 'logged.srt');
 });

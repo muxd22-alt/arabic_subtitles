@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.subarabify"
+    namespace = "com.arabicsubs"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.subarabify"
+        applicationId = "com.arabicsubs"
         minSdk = 26
         targetSdk = 35
-        versionCode = 27
-        versionName = "3.0.2-beta"
+        versionCode = 1
+        versionName = "1.0.0"
 
         ndk {
             abiFilters += setOf("arm64-v8a")
@@ -59,9 +59,6 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.core.ktx)
     debugImplementation(libs.compose.ui.tooling)
-
-    // WorkManager for continuous background monitoring
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
 
     // AndroidX Storage & DocumentFile for SAF directory traversal
     implementation("androidx.documentfile:documentfile:1.0.1")

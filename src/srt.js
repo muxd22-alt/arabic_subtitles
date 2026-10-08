@@ -1,6 +1,6 @@
 const { execFileSync } = require('child_process');
 
-const WATERMARK_TEXT = '[ ترجمت الأداة ساب أرابيفاي ]';
+const WATERMARK_TEXT = '[ ترجمت الأداة عربي سبس ]';
 const TIMESTAMP_RE = /^(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3})/;
 
 function timeToMs(t) {
@@ -19,10 +19,6 @@ function msToTime(d) {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
 }
 
-/**
- * Tolerant SRT parser: handles missing sequence numbers, CRLF, and mixed
- * decimal separators. Returns cues preserving original timing strings.
- */
 function parseSRT(data) {
     if (data === null || data === undefined) return [];
 
@@ -55,10 +51,6 @@ function parseSRT(data) {
     return cues;
 }
 
-/**
- * Reassemble a branded SRT. Keeps the historic watermark cue as index 1 and
- * renumbers the source cues from 2 — matching SubArabify's existing output.
- */
 function buildSRT(cues) {
     let srt = `1\n00:00:01,000 --> 00:00:04,000\n${WATERMARK_TEXT}\n\n`;
     cues.forEach((cue, idx) => {
@@ -67,12 +59,6 @@ function buildSRT(cues) {
     return srt;
 }
 
-/**
- * Normalize any subtitle payload to a clean UTF-8 string.
- * Handles UTF-8 BOM, UTF-16 LE/BE with BOM, UTF-16 without BOM (null-byte
- * heuristic) and falls back to latin1 with a warning flag.
- * @returns {{text: string, encoding: string, warnings: string[]}}
- */
 function normalizeToUtf8(input) {
     const warnings = [];
 
@@ -97,7 +83,6 @@ function normalizeToUtf8(input) {
         return { text: swapped.toString('utf16le'), encoding: 'utf16be-bom', warnings };
     }
 
-    // BOM-less UTF-16 heuristic: ASCII text produces a null byte every other byte
     if (buf.length >= 4) {
         let evenNulls = 0;
         let oddNulls = 0;
@@ -149,12 +134,6 @@ function looksArabic(text) {
     return arabicRatio(text) >= 0.3;
 }
 
-/**
- * Validate a subtitle payload before accepting it.
- * @param {string} rawText decoded subtitle text
- * @param {{durationMs?: number|null}} [options] video runtime, when known
- * @returns {{ok: boolean, reason: string|null, cues: Array, warnings: string[]}}
- */
 function validateSRT(rawText, options = {}) {
     const warnings = [];
 
@@ -206,15 +185,14 @@ function validateSRT(rawText, options = {}) {
 
     if (options.durationMs && options.durationMs > 0) {
         const runtimeSec = options.durationMs / 1000;
-        const minCues = Math.floor(runtimeSec / 120); // at least ~1 cue per 2 minutes
-        const maxCues = Math.ceil(runtimeSec);        // never more than ~1 cue per second
+        const minCues = Math.floor(runtimeSec / 120);
+        const maxCues = Math.ceil(runtimeSec);
         if (cues.length < Math.max(minCues, 1)) {
             return { ok: false, reason: `only ${cues.length} cues for ${Math.round(runtimeSec)}s runtime`, cues, warnings };
         }
         if (cues.length > maxCues) {
             return { ok: false, reason: `${cues.length} cues exceed ${Math.round(runtimeSec)}s runtime`, cues, warnings };
         }
-        // Subtitles should not outlive the video by more than a minute
         if (maxEndMs > options.durationMs + 60000) {
             return { ok: false, reason: `last cue ends at ${maxEndMs}ms, beyond runtime`, cues, warnings };
         }
@@ -223,7 +201,6 @@ function validateSRT(rawText, options = {}) {
     return { ok: true, reason: null, cues, warnings };
 }
 
-/** Best-effort runtime probe via ffprobe; returns null when unavailable. */
 function probeDurationMs(videoPath) {
     try {
         const out = execFileSync(

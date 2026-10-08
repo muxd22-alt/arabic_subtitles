@@ -1,4 +1,4 @@
-package com.subarabify.ui.theme
+package com.arabicsubs.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

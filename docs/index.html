@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ساب أرابيفاي | بحث وتجهيز الترجمة العربية</title>
-  <meta name="description" content="عامل خلفية يبحث عن الترجمة العربية الجاهزة لفلامك ومسلسلاتك ويجهّزها تلقائياً">
+  <title>عربي سبس | ترجمة تلقائية بالذكاء الاصطناعي دون اتصال</title>
+  <meta name="description" content="عربي سبس — أداة ترجمة تلقائية تعمل بالكامل على هاتفك عبر تيرمكس، تحوّل الترجمات الإنجليزية إلى عربية باستخدام نموذج Hy-MT2 و ffmpeg و whisper.cpp دون أي خدمة سحابية." />
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,6 +13,8 @@
     body, h1, h2, h3, p, a, div { font-family: 'Cairo', 'Inter', sans-serif !important; }
     .navbar { direction: rtl; }
     .nav-links { display: flex; gap: 15px; }
+    code { direction: ltr; display: inline-block; }
+    pre { direction: ltr; text-align: left; }
   </style>
 </head>
 <body>
@@ -20,112 +22,112 @@
   <!-- Navigation -->
   <nav class="navbar">
     <div class="logo">
-      <img src="SubArabify.png" alt="أيقونة ساب أرابيفاي" />
-      <span>ساب أرابيفاي</span>
+      <img src="ArabicSubs.png" alt="شعار عربي سبس" />
+      <span>عربي سبس</span>
     </div>
     <div class="nav-links">
-      <a href="https://github.com/muxd22-alt/SubArabify/releases/latest" class="btn-primary" style="background-color: #333;">تحميل تطبيق أندرويد</a>
-      <a href="https://github.com/muxd22-alt/SubArabify" class="btn-primary">عرض على جيت هب</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn-primary" style="background-color: #333;">تحميل ملف APK</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles" class="btn-primary">الكود المصدري</a>
     </div>
   </nav>
 
-  <!-- Hero Section -->
-  <header class="hero">
-    <div class="hero-overlay"></div>
+  <!-- Hero -->
+  <section class="hero">
     <div class="hero-content">
-      <h1>ترجمة عربية جاهزة. بدون أي مجهود.</h1>
-      <p>أداة خلفية تبحث عن الترجمة العربية الجاهزة لجميع أفلامك ومسلسلاتك — أولاً بجانب الملف ثم عبر OpenSubtitles — وتجهّزها تلقائياً.</p>
-      <div class="hero-actions" style="display: flex; gap: 20px; justify-content: center; direction: rtl;">
-        <a href="#how-it-works" class="btn-primary btn-large">اكتشف كيف يعمل</a>
-        <a href="https://github.com/muxd22-alt/SubArabify/releases/latest" class="btn-primary btn-large" style="background-color: #4CAF50;">تحميل التطبيق المرافق</a>
+      <h1>ترجمة تلقائية<br />تعمل بالكامل على هاتفك</h1>
+      <p>
+        أداة <strong>دون اتصال بالإنترنت</strong> تحوّل الترجمات الإنجليزية إلى عربية
+        لمسلسلاتك وأفلامك باستخدام نموذج <strong>Hy-MT2</strong> المحمّل محلياً،
+        وتستخرج الكلام من الفيديو الذي لا يملك ترجمة عبر <strong>ffmpeg</strong> و
+        <strong>whisper.cpp</strong> — بدون أي خدمة سحابية أو حسابات أو تكاليف.
+      </p>
+      <div class="hero-buttons">
+        <a href="https://github.com/muxd22-alt/arabic_subtitles" class="btn-primary">ابدأ الآن</a>
+        <a href="https://github.com/muxd22-alt/arabic_subtitles#quick-start-termux" class="btn-secondary">دليل التثبيت</a>
       </div>
     </div>
-  </header>
+  </section>
 
-  <main>
-    <div class="divider"></div>
-
-    <!-- Section 1: Background Worker -->
-    <section id="how-it-works" class="feature alternate">
-      <div class="feature-text">
-        <h2>غير مرئي، لا يمكن إيقافه.</h2>
-        <p>يعمل ساب أرابيفاي كعقدة خلفية صامتة، يعمل بسلاسة دون فوضى في واجهة المستخدم. وجهه إلى مجلد الوسائط الخاص بك، وسيبحث عن الترجمة ويجهّزها بصمت بينما تشاهد.</p>
+  <!-- How it works -->
+  <section class="features">
+    <h2>كيف تعمل؟</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🎬</div>
+        <h3>اختر المجلدات</h3>
+        <p>حدّد مجلدات الأفلام والمسلسلات من خلال تطبيق المرافق أو مباشرة من تيرمكس.</p>
       </div>
-      <div class="feature-visual">
-        <div class="status-card glow-red">
-          <div class="status-header">عامل الخلفية</div>
-          <div class="pulse-ring">
-            <div class="pulse-dot"></div>
-          </div>
-          <div class="status-info">يراقب: ~/Movies</div>
-          <div class="status-info">يرصد: TV Shows</div>
-        </div>
+      <div class="feature-card">
+        <div class="feature-icon">🧠</div>
+        <h3>ترجمة محلية</h3>
+        <p>نموذج Hy-MT2 بحجم 440 ميجابايت يعمل داخل llama-server على معالج/معالج رسومي هاتفك.</p>
       </div>
-    </section>
-    
-    <div class="divider"></div>
-
-    <!-- Section 2: Ready-made subtitle lookup -->
-    <section class="feature">
-      <div class="feature-text">
-        <h2>لا توجد ترجمة عربية؟ سيجدها لك.</h2>
-        <p>يقرأ ساب أرابيفاي اسم الملف ليعرف الفيلم وسنته، ثم يبحث أولاً عن ترجمة عربية جاهزة بجانب الفيلم، ثم في <strong>OpenSubtitles</strong> عبر بصمة الملف الفريدة وبعدها بالاسم، ويحفظ النتيجة باسم <span style="direction: ltr; display: inline-block;">Movie.SubArabify.ar.srt</span> مع علامة الأداة. بدون ذكاء اصطناعي وبدون استخراج صوت.</p>
+      <div class="feature-card">
+        <div class="feature-icon">🎙️</div>
+        <h3>من الصوت إلى النص</h3>
+        <p>الفيديوهات بلا ترجمة تُقطَّع إلى مقاطع متوازية وتُفكَّ عبر whisper.cpp ثم تُترجَم.</p>
       </div>
-      <div class="feature-visual">
-        <div class="code-window">
-          <div class="window-header">
-            <span></span><span></span><span></span>
-          </div>
-          <pre style="direction: ltr; text-align: left;"><code>[Finder] Identified: "Interstellar" (2014)
-[Finder] Found (OpenSubtitles, moviehash)
-[Success] Arabic subtitle branded.
-[Success] Interstellar.SubArabify.ar.srt saved.</code></pre>
-        </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>معالجة متوازية</h3>
+        <p>مقاطع الترجمة تُرسل على 4 مسارات بالتوازي، ومقاطع الصوت تُستخرج بالتوازي أيضاً.</p>
       </div>
-    </section>
-
-    <div class="divider"></div>
-
-    <!-- Section 3: Smart Naming & Episode Logic -->
-    <section class="feature alternate">
-      <div class="feature-text">
-        <h2>اكتشاف ذكي للغاية.</h2>
-        <p>مكتبتك عشوائية التسمية؟ ساب أرابيفاي لا يهتم بذلك. يكتشف المجلدات المتفرعة بدقة، ويطابق الأسماء المبعثرة بالترجمات الأصلية، أويبحث تلقائياً عن حلقة التلفاز. كل مسار يتم ربطه بدقة متناهية.</p>
+      <div class="feature-card">
+        <div class="feature-icon">📁</div>
+        <h3>ملف جاهز بجانب الفيديو</h3>
+        <p>النتيجة <span style="direction: ltr; display: inline-block;">Movie.ArabicSubs.ar.srt</span> مع علامة مائية — لا يمسّ الفيديو نفسه.</p>
       </div>
-      <div class="feature-visual" style="direction: ltr; text-align: left;">
-        <div class="file-tree">
-          <div class="folder">📺 Breaking Bad / Season 1</div>
-          <div class="file video">S01E01_Pilot.mkv</div>
-          <div class="file subtitle added" style="direction: ltr;">↳ S01E01_Pilot.SubArabify.ar.srt</div>
-          <div class="file video">S01E02_Cats_in_the_bag.mp4</div>
-          <div class="file subtitle scan" style="direction: rtl;">↳ قيد المعالجة...</div>
-        </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>سجل قرارات</h3>
+        <p>كل قرار (ترجمة، تخطي، سبب الفشل) يُسجَّل في <span style="direction: ltr; display: inline-block;">logs/decisions.jsonl</span>.</p>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <div class="divider"></div>
+  <!-- Pipeline -->
+  <section class="pipeline">
+    <h2>ترتيب المصادر</h2>
+    <div class="pipeline-steps">
+      <div class="step">١. المخرج موجود مسبقاً ← تخطٍّ</div>
+      <div class="step">٢. ترجمة عربية جاهزة ← لصق العلامة المائية</div>
+      <div class="step">٣. ترجمة إنجليزية ← ترجمة عبر Hy-MT2</div>
+      <div class="step">٤. مسار ترجمة مضمّن ← ترجمة عبر Hy-MT2</div>
+      <div class="step">٥. لا شيء ← استخراج الصوت ← whisper.cpp ← ترجمة</div>
+      <div class="step">٦. لا صوت ولا ترجمة ← تسجيل السبب والتخطي</div>
+    </div>
+    <pre><code>$ node bin/arabic-subs.js run --media /sdcard/Movies
+[Engine] Watching /sdcard/Movies
+[Queue] → Interstellar.2014.mkv (0 waiting)
+[Stage] Interstellar.2014.mkv → translate (1842 cues)
+[Translate] 1842 lines done
+[Queue] ✓ Interstellar.2014.mkv [translated]
+[Success] Interstellar.2014.ArabicSubs.ar.srt saved.</code></pre>
+  </section>
 
-    <!-- Section 4: Skips Old Work -->
-    <section class="feature">
-      <div class="feature-text">
-        <h2>لا يقوم بالعمل مرتين.</h2>
-        <p>لماذا تهدر مواردك على ما تم إنجازه؟ يتحقق ساب أرابيفاي بذكاء من بنية الملفات لمعرفة إن وجدت ترجمات تم صنعها مسبقاً، وإذا وجدها سيتخطى الفحص فوراً مما يحافظ على الأداء بأفضل وتيرة.</p>
-      </div>
-      <div class="feature-visual centered-visual">
-        <div class="skip-badge">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
-          <h3>مُترجم مسبقاً</h3>
-          <p>تم التخطي بنجاح.</p>
-        </div>
-      </div>
-    </section>
-  </main>
+  <!-- Install -->
+  <section class="install">
+    <h2>التثبيت على تيرمكس</h2>
+    <pre><code>termux-setup-storage
+pkg update && pkg install nodejs ffmpeg -y
+git clone https://github.com/muxd22-alt/arabic_subtitles.git
+cd arabic_subtitles && npm install
+bash scripts/setup-termux.sh
+node bin/arabic-subs.js run --media /sdcard/Movies</code></pre>
+    <p class="note">
+      ملاحظة: ثبّت تيرمكس من <a href="https://f-droid.org/packages/com.termux/">F-Droid</a>
+      وليس من متجر Google Play.
+    </p>
+  </section>
 
-  <div class="divider"></div>
-
+  <!-- Footer -->
   <footer>
-    <p>بدون سيرفرات إضافية — كل شيء يعمل على جهازك. أداء بنسبة ١٠٠%.</p>
-    <a href="https://github.com/muxd22-alt/SubArabify">تشغيل الأداة برمجياً</a>
+    <div class="footer-links">
+      <a href="https://github.com/muxd22-alt/arabic_subtitles">المستودع</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles/releases">الإصدارات</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles/issues">الإبلاغ عن مشكلة</a>
+    </div>
+    <p>عربي سبس — أداة مفتوحة المصدر برخصة MIT. تعمل بالكامل على جهازك.</p>
   </footer>
 
 </body>

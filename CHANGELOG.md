@@ -1,140 +1,53 @@
 # Changelog
 
-## 3.0.2-beta — AI removed: subtitle-only pipeline
+## 1.0.0 — ground-up rebuild: Arabic Subs (offline EN→AR translation)
 
-All Puter.js AI is gone (translation + audio transcription), and the API token
-config with it — the account was rate-limited and is no longer useful.
+The project was renamed from **SubArabify** to **Arabic Subs / arabic_subtitles**
+and rewritten from scratch around Tencent **Hy-MT2**. Everything OpenSubtitles-,
+TMDB-, and Puter.js-related is gone.
 
-- **Removed:** `translateSRTWithPuter`, `transcribeAudioWithPuter`, the Puter
-  init/auth block, `PUTER_AUTH_TOKEN` handling, the `@heyputer/puter.js`
-  dependency, and the XHR-shim polyfill. Nothing calls any AI service now.
-- **Pipeline** is now: existing output → skip · local Arabic → brand ·
-  OpenSubtitles Arabic (hash→title) → brand · English found → `skip-english` ·
-  nothing → `no-subtitle`. Videos without a ready-made Arabic subtitle are left
-  untouched with the reason recorded in `logs/decisions.jsonl`.
-- **Branding** updated (as requested): watermark is now
-  `[ ترجمت الأداة ساب أرابيفاي ]` (the "— مدعوم من Puter.js" clause is gone),
-  and the website (`docs/index.html`) no longer claims AI features.
-- `identifyMovie` strips both `\` and `/` separators so Windows-style paths
-  parse correctly on Linux (caught by CI).
-- package renamed `subarabify-puter` → `subarabify`; app `versionCode` 27,
-  `versionName "3.0.2-beta"`.
-- Tests updated to the no-AI behavior (English/no-subtitle paths assert clean
-  skips).
+### Engine (new `src/`, `bin/arabic-subs.js`)
 
-## 3.0.1-beta — subtitle-first pipeline, stage 1: identify + fetch
+- **Hy-MT2 translation** — `Hy-MT2-1.8B-1.25Bit.gguf` (461 860 800 bytes) served
+  by a locally spawned `llama-server`; numbered-line prompt with per-line
+  fallback parsing.
+- **Parallel chunk translation** — cues batched at ≤16 lines / ≤800 chars,
+  pushed through a 4-way pool; every batch is validated (must return Arabic) and
+  a bad batch is split in half and retried, falling back to source text rather
+  than aborting the video.
+- **Audio path** — ffmpeg splits the timeline into 5-minute windows with a
+  1-second overlap (2 concurrent workers), whisper.cpp transcribes each window,
+  and cues are merged by midpoint ownership so overlap regions never duplicate.
+- **Per-video pipeline** — existing output → skip; ready-made Arabic → brand;
+  English subtitle → translate; embedded track → extract then translate;
+  otherwise the audio path; every outcome logged to `logs/decisions.jsonl`.
+- **Zero runtime dependencies** — watchers replaced by polling folder scans
+  (inotify is unreliable on Android shared storage), torrent-name parsing and
+  OpenSubtitles clients deleted outright.
+- **Model downloader** — Range-resume from `.part` files, redirect handling,
+  bounded retries; `arabic-subs setup` fetches both the Hy-MT2 and whisper models.
+- **Status API** — `GET http://127.0.0.1:18435/status` for the companion APK.
+- **CLI** — `setup`, `run`, `translate`, `transcribe`, `scan`, `status`, `log`.
 
-First slice of the genre-aware rebuild: stop reaching for the microphone when a
-subtitle already exists. AI transcription is now the last resort, not the default.
+### App (Android)
 
-- **`movie-identifier.js`** — release name → `{title, year, season/episode}` via
-  `parse-torrent-title` (MIT, pure JS) with a cleaned/fuzzy fallback when the parser
-  finds nothing; noise-only names (`___1080p___`) are rejected instead of invented.
-- **`opensubtitles.js`** — plain REST client for OpenSubtitles.com v1 (no SDK):
-  `GET /subtitles` search (moviehash → title+year), the two-step `POST /download` link
-  flow, optional `/login` JWT when account credentials are configured, 429/5xx retries,
-  quota-exhaustion detection, and a dependency-free **OSHash** implementation verified
-  against the canonical `opensubtitles/oshash` test vectors.
-- **`subtitle-finder.js`** — the priority ladder: local Arabic → OpenSubtitles Arabic →
-  local English → OpenSubtitles English → nothing. Arabic is classified by *content*, not
-  just file name; its own output/cache files are never re-consumed; every candidate is
-  validated (SRT parse, cue-count-vs-runtime sanity, UTF-8 normalization incl. BOM/UTF-16)
-  before it is accepted. Exposes a provider hook for the later `subliminal_patch` layer.
-- **`srt-utils.js`** — shared parse/validate/build/normalize helpers; the historic
-  watermark cue and `MovieName.SubArabify.ar.srt` naming are unchanged.
-- **`decision-log.js` + `config.js`** — every per-movie decision appended as JSONL to
-  `logs/decisions.jsonl` (no native SQLite — it is fragile to build on Termux/ARM64), and
-  a dependency-free `.env` loader for `OPENSUBTITLES_API_KEY` / `TMDB_API_KEY`.
-- **Watch loop** — `processVideoFile` now routes: existing output → skip · Arabic →
-  brand only · English → Puter translation · none → audio transcription, with injectable
-  hooks so tests never touch the network.
-- **Tests** — 63 cases (`npm test`): identifier across genres (sci-fi, horror, TV,
-  Arabic filenames), OSHash canonical vectors + zero-padding, SRT validation/encoding,
-  finder ordering with mocked providers, and full pipeline routing.
-- **CI** — new `Node Tests` workflow runs the suite with the `OpenSubtitles`/`TMDBAPI`
-  repository secrets; live contract tests skip cleanly when the keys are absent.
-- App: `versionCode` 26, `versionName "3.0.1-beta"` (label + banner bumped).
-- Docs: README documents the fallback order, `.env` keys, and a manual test plan.
+- Rebranded to `com.arabicsubs` (namespace, applicationId, sources, proguard).
+- Multiple media folders can be picked (Movies + TV Shows) instead of one.
+- Live engine status card polling the node status API.
+- Launch/translate commands updated to `~/arabic_subtitles` + `arabic-subs`.
+- `INTERNET` permission added for localhost status polling; WorkManager dropped.
+- `versionCode 1`, `versionName 1.0.0`; icon renamed `arabicsubs_icon`.
 
-## 0.2.3-alpha — same engine, versioned
+### Docs & CI
 
-First cut re-releasing the clean-slate stack under a new version line. Everything from
-0.2.2-beta carries over; this tag's job is to lock the **Jellyfin addon** addition that
-0.2.2-beta CI shipped days after its tag.
+- README rewritten for the offline pipeline; landing page rewritten.
+- `node-ci.yml` no longer needs OpenSubtitles/TMDB secrets (62 tests, no network).
+- `android-build.yml` artifacts renamed `ArabicSubs-APK`, release only on tags.
+- New `scripts/setup-termux.sh`: installs nodejs/ffmpeg/llama-cpp and builds
+  llama.cpp + whisper.cpp from source when packages are unavailable.
 
-- App: `versionCode` 23, `versionName "0.2.3-alpha"` (label, User-Agent, multipart
-  boundary, brand line all bumped).
-- **Jellyfin addon now in the release**: `jellyfin-addon/` is a backend-driven companion
-  of the Colab backend — scan a library on a server or in Termux, route each movie
-  (skip / translate / transcribe), write branded `*.SubArabify.ar.srt`. One URL
-  everywhere; `--qrcode` prints a scannable QR on the TV; `--serve` exposes
-  `http://<host>:8477/subarabify/config`; `run-termux.sh` is the universal runner.
-- CI builds, self-tests the addon, and publishes `SubArabify-0.2.3-alpha.apk` + the
-  addon ZIP + `jellyfin-manifest.json` to GitHub Pages.
-- Docs & landing page updated to v0.2.3-alpha with the unified one-URL story.
+### Removed
 
-## 0.2.2-beta — clean slate, one backend
-
-A reset that takes the lesson of the earlier betas: the phone should only carry the
-routing, not the models. Every translation and transcription now runs on a free Google
-Colab T4 backend, and the repo history was squashed to a single commit that tells only
-this story.
-
-**One hidden engine — [`backend/SubArabify_Backend.ipynb`](backend/SubArabify_Backend.ipynb)**
-- Colab T4 → installs Hugging Face `transformers` + FastAPI, loads
-  `samil24/whisper-large-arabic-dialects-v5` (Whisper large-v3 fine-tune for Arabic
-  dialects, fp16) and `Helsinki-NLP/opus-mt-en-ar`, then bootstraps with a free
-  Cloudflare quick tunnel (no account; pyngrok fallback).
-- Async job API: `POST /jobs` (`srt=` translate · `file=` transcribe) → `GET /jobs/{id}`
-  progress → `GET /jobs/{id}/srt`. 5-min overlapping windows, midpoint-stitched.
-- Always returns **plain, unbranded SRT** — the client brands it with the same rules everywhere.
-
-**Python client — [`client/`](client/)**
-- Same routing as Android: existing `.SubArabify.ar.srt` → skip; English `.srt` →
-  translate; none → ffmpeg-extract 16 kHz WAV → transcribe.
-- `--media` (repeatable) recursive scans, `--sync` blocking mode, `--transport auto|wav|opus`
-  (Opus keeps big movies under the tunnel's ~100 MB body cap), `--job <id>` resume,
-  `--timeout` deadline (default 90 min).
-- 19 CI-run tests (12 client + 7 srtcore) against a mock backend — no ffmpeg needed.
-
-**Android — thin container**
-- `BackendClient.kt`: `/health` probe (model + MT status), multipart uploads, tolerant
-  polling (`MAX_POLL_MISSES=12`), 6 h deadline.
-- Worker routes: existing Arabic → done; smart source resolver finds `.en.srt` →
-  translate; else `AudioExtractor` streams a 16 kHz mono WAV (MediaCodec, no FFmpeg) →
-  transcribe. Returns are branded via `SrtParser.buildBrandedSrt` and written as
-  `*.SubArabify.ar.srt` with in-app preview.
-- Backend card in the UI to paste the tunnel URL (health-rendered `online`/`offline`).
-- **Removed**: ML Kit translator, Vosk speech-to-text, translation memory, all their deps.
-  `versionCode` 22, `versionName 0.2.2-beta`; `usesCleartextTraffic` enabled for tunnel URLs.
-
-**Docs & housekeeping**
-- Landing page, README, and CI rebuilt around the one-engine story. CI self-tests the
-  Python client + the Jellyfin addon and ships `SubArabify-0.2.2-beta.apk`.
-
-**Jellyfin addon — unified, backend-driven ([`jellyfin-addon/`](jellyfin-addon/))**
-- Re-added the "smart way": the addon is now a **third front door for the same Colab
-  backend** (the old on-device whisper.cpp/llama.cpp engine is gone). Runs on a Jellyfin
-  server or in Termux (phone / Android TV); identical routing + branding
-  (`srtcore.py` is a byte-identical copy of `client/srtcore.py`).
-- **One URL everywhere**: `--url` > `$SUBARABIFY_COLAB_URL` > `config.json` `colab_url` —
-  exactly the URL pasted into the app's Backend card.
-- **QR on the TV for the Android app**: `python jellyfin-addon/subarabify_jellyfin.py
-  --qrcode` prints a scannable QR of the backend URL (scan → paste into the app) plus an
-  optional `--qr-png`; `--serve` exposes a LAN endpoint
-  (`http://<host>:8477/subarabify/config`) for phone-safe copying.
-- **Smart transport on the server**: files ≤ ~90 MB are uploaded directly (the backend
-  converts with its own ffmpeg — no local ffmpeg needed), bigger ones are reduced to
-  16 kHz WAV / Opus when a local ffmpeg exists (Jellyfin ships one).
-- `run-termux.sh` universal runner prompts once for the URL and saves `config.json`.
-- Added `test_addon.py` (config precedence, QR, LAN endpoint, routing, mock-backend
-  round trip) — runs in CI alongside the existing suites.
-
-## 1.0.4-pre — (removed) Colab T4 full-movie transcription
-
-> This release's history was removed in 0.2.2-beta. The transcription-only notebook and
-> its client belonged to a version whose on-device ML Kit/Vosk stacks were dropped.
-
-## 1.0.3-beta — (removed) speech-to-text update
-
-> Removed with the on-device engine in 0.2.2-beta.
+- `subarabify.js`, `opensubtitles.js`, `movie-identifier.js`, `subtitle-finder.js`,
+  `srt-utils.js`, `config.js`, `decision-log.js`, `.env.example`,
+  `parse-torrent-title` / `chokidar` dependencies, all related tests.

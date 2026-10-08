@@ -26,9 +26,9 @@ __pycache__/
 # Node dependencies
 node_modules/
 
-# Secrets — real keys live in .env (local) or GitHub Secrets (CI)
+# Optional local config (arabic-subs reads KEY=value from it)
 .env
 
 # Runtime output
 logs/
-.subarabify_tmp/
+.arabic_subs_tmp/
