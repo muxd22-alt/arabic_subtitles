@@ -40,10 +40,9 @@ data class WizardStep(
 )
 
 const val SETUP_ONE_LINER =
-    "pkg update -y; pkg install -y git nodejs ffmpeg; " +
-        "git clone https://github.com/muxd22-alt/arabic_subtitles.git ~/arabic_subtitles 2>/dev/null; " +
-        "cd ~/arabic_subtitles; git pull --ff-only 2>/dev/null; npm install; " +
-        "ARABIC_SUBS_SKIP_UPDATE=1 bash scripts/setup-termux.sh"
+    "pkg install -y curl; " +
+        "curl -fsSL -o ArabicSubs.sh https://raw.githubusercontent.com/muxd22-alt/arabic_subtitles/main/ArabicSubs.sh; " +
+        "bash ArabicSubs.sh"
 
 /**
  * Three steps, that's all: one command in Termux that does everything, then
@@ -62,7 +61,7 @@ fun buildWizardSteps(mediaPaths: List<String>): List<WizardStep> {
     return listOf(
         WizardStep(
             title = "١ — أمر واحد في تيرمكس",
-            hint = "ينفّذ كل شيء مرة واحدة: إذن التخزين، الحزم، تحميل الكود، llama-server، whisper — ثم يسأل قبل تنزيل النماذج (~590MB). يستغرق ٥ إلى ١٥ دقيقة.",
+            hint = "ينزّل ملف ArabicSubs.sh ويشغّله: الحزم، الكود، llama-server، whisper — ثم يسأل قبل تنزيل النماذج (~590MB). يستغرق ٥ إلى ١٥ دقيقة، ويعاد تشغيله بأمان.",
             command = SETUP_ONE_LINER
         ),
         WizardStep(

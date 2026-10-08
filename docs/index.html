@@ -132,18 +132,26 @@
   <!-- ══ Install ══ -->
   <section class="install" id="install">
     <h2 class="section-title">التثبيت في تيرمكس</h2>
-    <p class="section-sub">افتح التطبيق: أمر واحد في تيرمكس ينفّذ كل شيء، ثم تختار مجلداتك داخل التطبيق.</p>
+    <p class="section-sub">ملف واحد: نزّله وشغّله، ثم ارجع للتطبيق واختر مجلدات الأفلام والمسلسلات.</p>
 
     <div class="term">
       <div class="term-bar">
         <i class="dot r"></i><i class="dot y"></i><i class="dot g"></i>
         <span>install</span>
       </div>
-      <pre><span class="dim"># 1. أمر واحد: الإذن + الحزم + الكود + llama-server + whisper (آمن لإعادة التشغيل)</span>
-<span class="cmd">$</span> pkg update -y; pkg install -y git nodejs ffmpeg; git clone https://github.com/muxd22-alt/arabic_subtitles.git ~/arabic_subtitles 2>/dev/null; cd ~/arabic_subtitles; git pull --ff-only 2>/dev/null; npm install; ARABIC_SUBS_SKIP_UPDATE=1 bash scripts/setup-termux.sh
+      <pre><span class="dim"># 1. ArabicSubs.sh — كل شيء في ملف واحد، وآمن لإعادة التشغيل</span>
+<span class="cmd">$</span> pkg install -y curl; curl -fsSL -o ArabicSubs.sh https://raw.githubusercontent.com/muxd22-alt/arabic_subtitles/main/ArabicSubs.sh; bash ArabicSubs.sh
 
-<span class="dim"># 2. التشغيل — يسأل قبل تنزيل النماذج (~590MB)</span>
-<span class="cmd">$</span> node bin/arabic-subs.js run --media /sdcard/Movies --media "/sdcard/TV Shows"
+<span class="dim">[ArabicSubs] 1/5  packages (git, nodejs, ffmpeg)</span>
+<span class="dim">[ArabicSubs] 2/5  code — clone first time, git pull every time after</span>
+<span class="dim">[ArabicSubs] 3/5  node dependencies</span>
+<span class="dim">[ArabicSubs] 4/5  llama-server + whisper (+ cmake repair if the toolchain is broken)</span>
+<span class="dim">[setup]   Download now? [y/N]</span> <span class="ok">y</span>
+<span class="dim">[ArabicSubs] 5/5  done</span>
+<span class="dim">  Now open the Arabic Subs app: add your Movies / TV Shows folder, press start.</span>
+
+<span class="dim"># 2. أو شغّل المحرك يدوياً — يسأل قبل تنزيل النماذج (~590MB)</span>
+<span class="cmd">$</span> cd ~/arabic_subtitles &amp;&amp; node bin/arabic-subs.js run --media /sdcard/Movies --media "/sdcard/TV Shows"
 <span class="dim">[Engine]   Hy-MT2-1.8B (1.25-bit GGUF)  440 MB  huggingface.co/tencent/Hy-MT2-1.8B-1.25Bit-GGUF</span>
 <span class="dim">[Engine] Download now? [y/N]</span> <span class="ok">y</span></pre>
     </div>
@@ -155,7 +163,7 @@
 
     <div class="apk-card">
       <div class="meta">
-        <h3>تطبيق المرافق Android <span class="chip">v1.1.4</span></h3>
+        <h3>تطبيق المرافق Android <span class="chip">v1.1.5</span></h3>
         <p>ثلاث خطوات فقط: أمر واحد في تيرمكس، اختيار مجلدات الأفلام والمسلسلات، ثم تشغيل المحرك مع حالته المباشرة.</p>
       </div>
       <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn btn-gold">⬇ تنزيل APK</a>

@@ -37,7 +37,7 @@ fi
 # ── 2. packages ────────────────────────────────────────────────────────────
 step "packages"
 export DEBIAN_FRONTEND=noninteractive
-# bootstrap.sh already refreshed the index — don't do it twice
+# ArabicSubs.sh already refreshed the index — don't do it twice
 if [ "${ARABIC_SUBS_SKIP_UPDATE:-0}" != "1" ]; then
     pkg update -y
 fi

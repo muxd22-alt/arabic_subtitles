@@ -145,7 +145,7 @@ async function ensureDownloads(flags) {
 
     if (!haveWhisperBin) {
         console.log('[Engine] whisper-cli not found — videos with no subtitle at all will be skipped.');
-        console.log('[Engine] Install it with: bash scripts/setup-termux.sh');
+        console.log('[Engine] Fix it with: bash ~/ArabicSubs.sh');
     }
 
     if (!needModel && !needWhisper) return true;
@@ -227,7 +227,7 @@ async function ensureLlamaServer(flags) {
     const onTermux = Boolean(process.env.PREFIX) && process.platform !== 'win32';
     console.log('[Engine] llama-server is not installed yet — it is the process that runs Hy-MT2.');
     if (!onTermux) {
-        console.log('[Engine] Install it: bash scripts/setup-termux.sh');
+        console.log('[Engine] Install llama-server (llama.cpp) and put it on PATH.');
         return false;
     }
 
@@ -253,7 +253,7 @@ async function ensureLlamaServer(flags) {
     }
 
     console.log('[Engine] llama-cpp was not available from the package repo.');
-    console.log('[Engine] Run: bash scripts/setup-termux.sh');
+    console.log('[Engine] Run: bash ~/ArabicSubs.sh');
     console.log('[Engine] (it repairs a broken cmake first, then builds llama.cpp)');
     return false;
 }
@@ -266,7 +266,7 @@ async function startServer(flags) {
     } catch (err) {
         if (/binary not found/i.test(err.message)) {
             console.error('[Engine] llama-server is not installed yet.');
-            console.error('[Engine] Run: bash scripts/setup-termux.sh');
+            console.error('[Engine] Run: bash ~/ArabicSubs.sh');
             console.error('[Engine] If cmake fails with a missing symbol, first run: pkg upgrade -y');
             return null;
         }

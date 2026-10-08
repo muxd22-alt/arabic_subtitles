@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.5 — ArabicSubs.sh: the whole setup in one file
+
+- New `ArabicSubs.sh` at the repo root — packages, code, npm deps,
+  llama-server, whisper, cmake repair, models (after the `[y/N]` prompt), all
+  in one file you download and run:
+
+  ```bash
+  pkg install -y curl; curl -fsSL -o ArabicSubs.sh https://raw.githubusercontent.com/muxd22-alt/arabic_subtitles/main/ArabicSubs.sh; bash ArabicSubs.sh
+  ```
+
+- Wizard step 1 runs exactly that line, so what is copied is short enough to
+  paste without the terminal joining it to whatever was already on the prompt.
+- `scripts/bootstrap.sh` removed — `ArabicSubs.sh` is the one and only
+  bootstrap; `scripts/setup-termux.sh` stays as the deep installer it calls.
+- README and the landing page show the command plus the output it prints.
+- `versionCode 7`, `versionName 1.1.5`.
+
 ## 1.1.4 — one command in Termux, then back to the app
 
 - **Wizard rewritten to three steps**: ① one Termux command that does everything

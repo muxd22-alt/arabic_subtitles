@@ -42,13 +42,28 @@ Every decision lands in `logs/decisions.jsonl`.
 ```bash
 # 1. install Termux from F-Droid (not Play Store)
 
-# 2. one line does everything: storage link, packages, code, llama-server,
-#    whisper — then asks permission before the ~590 MB of models.
-#    Safe to re-run: every step skips what is already done and never prompts twice.
-pkg update -y; pkg install -y git nodejs ffmpeg; git clone https://github.com/muxd22-alt/arabic_subtitles.git ~/arabic_subtitles 2>/dev/null; cd ~/arabic_subtitles; git pull --ff-only 2>/dev/null; npm install; ARABIC_SUBS_SKIP_UPDATE=1 bash scripts/setup-termux.sh
+# 2. one file does everything: packages, code, llama-server, whisper,
+#    then asks permission before the ~590 MB of models.
+#    Safe to re-run: every step reports "already …" instead of asking twice.
+pkg install -y curl; curl -fsSL -o ArabicSubs.sh https://raw.githubusercontent.com/muxd22-alt/arabic_subtitles/main/ArabicSubs.sh; bash ArabicSubs.sh
 
 # 3. run the engine over your media folders
 node bin/arabic-subs.js run --media /sdcard/Movies --media "/sdcard/TV Shows"
+```
+
+`ArabicSubs.sh` (repo root) is the whole thing — what it prints:
+
+```text
+[ArabicSubs] 1/5  packages (git, nodejs, ffmpeg)
+[ArabicSubs] 2/5  code — clone first time, git pull every time after
+[ArabicSubs] 3/5  node dependencies
+[ArabicSubs] 4/5  llama-server + whisper (+ cmake repair if the toolchain is broken)
+[setup]   Download now? [y/N] y
+[ArabicSubs] 5/5  done
+
+  Now open the Arabic Subs app:
+    1. add your Movies / TV Shows folder(s)
+    2. press start — the engine runs through Termux
 ```
 
 Every source goes through **one model** — Hy-MT2. Whether the text comes from an
@@ -88,7 +103,7 @@ arabic-subs log                        # recent decisions
 | Node 18+ | engine | `pkg install nodejs` |
 | ffmpeg / ffprobe | audio chunks, duration probing | `pkg install ffmpeg` |
 | llama-server | serves Hy-MT2 | `pkg install llama-cpp` |
-| whisper-cli | speech → text for subtitle-less videos | build via `scripts/setup-termux.sh` |
+| whisper-cli | speech → text for subtitle-less videos | `bash ~/ArabicSubs.sh` |
 
 Without ffmpeg/whisper the engine still translates any existing English
 subtitle — the audio path simply reports `no-subtitle-or-audio`.
