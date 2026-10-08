@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.2 — the wizard updates an existing clone
+
+- Wizard step 3 now runs `git pull --ff-only` when `~/arabic_subtitles` already
+  exists, so a phone that cloned the project earlier gets the current engine
+  (permission prompts, idempotent setup) instead of staying on stale code.
+- `versionCode 4`, `versionName 1.1.2`.
+
 ## 1.1.1 — permission-gated downloads, idempotent setup
 
 ### Engine (`arabic-subs run` / `translate`)

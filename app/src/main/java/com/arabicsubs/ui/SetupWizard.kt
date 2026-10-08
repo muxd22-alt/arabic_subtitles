@@ -63,8 +63,8 @@ fun buildWizardSteps(mediaPaths: List<String>): List<WizardStep> {
         ),
         WizardStep(
             title = "تحميل المشروع",
-            hint = "يتخطّى git clone إذا كان المجلد موجوداً، ثم يثبّت الحزم.",
-            command = "[ -d ~/arabic_subtitles ] || git clone https://github.com/muxd22-alt/arabic_subtitles.git; cd ~/arabic_subtitles && npm install"
+            hint = "ينسخ الكود أول مرة، ويجري git pull لتحديثه في المرة القادمة، ثم يثبّت الحزم.",
+            command = "if [ ! -d ~/arabic_subtitles ]; then git clone https://github.com/muxd22-alt/arabic_subtitles.git; fi; cd ~/arabic_subtitles && git pull --ff-only; npm install"
         ),
         WizardStep(
             title = "الأدوات والنماذج",
