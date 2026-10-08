@@ -117,7 +117,7 @@ Everything has a default; override with env vars or a `.env` file:
 ## Output
 
 - Files: `MovieName.ArabicSubs.ar.srt` (sidecar, never touches the video)
-- Watermark: first cue is `[ ترجمت الأداة عربي سبس ]`
+- Watermark: first cue is `[ ترجمة الأداة عربي سبس ]`
 - Log: `logs/decisions.jsonl` — one JSON object per decision
 
 ## Development

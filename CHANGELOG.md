@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Watermark wording corrected: the first cue now reads
+  `[ ترجمة الأداة عربي سبس ]` (was `ترجمت`). Engine only — no new APK needed,
+  `git pull` picks it up on the next run.
+
 ## 1.1.3 — self-updating setup, guards that survive the clipboard
 
 - `scripts/setup-termux.sh` pulls the latest checkout and re-executes itself, so

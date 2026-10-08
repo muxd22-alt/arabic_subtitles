@@ -1,6 +1,6 @@
 const { execFileSync } = require('child_process');
 
-const WATERMARK_TEXT = '[ ترجمت الأداة عربي سبس ]';
+const WATERMARK_TEXT = '[ ترجمة الأداة عربي سبس ]';
 const TIMESTAMP_RE = /^(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3})/;
 
 function timeToMs(t) {
