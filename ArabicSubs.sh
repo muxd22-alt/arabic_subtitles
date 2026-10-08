@@ -8,6 +8,7 @@
 #  4. llama-server + whisper + cmake repair       5. models (asks first)
 #
 #  Safe to run again: every step reports "already …" instead of asking twice.
+#  If anything fails it says where, and re-running resumes from that step.
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -17,13 +18,29 @@ export DEBIAN_FRONTEND=noninteractive
 
 step() { echo; echo "[ArabicSubs] $*"; }
 
+fail() {
+    echo
+    echo "[ArabicSubs] FAILED at line $1."
+    echo "[ArabicSubs] Re-run the same line — it resumes where it stopped:"
+    echo "  bash ArabicSubs.sh"
+}
+trap 'fail $LINENO' ERR
+
 step "1/5  packages (git, nodejs, ffmpeg)"
-pkg update -y
+pkg update -y || echo "[ArabicSubs] warning: the package index had errors — continuing"
 pkg install -y git nodejs ffmpeg
 
 step "2/5  code — clone first time, git pull every time after"
 if [ -d "$DIR/.git" ]; then
-    git -C "$DIR" pull --ff-only || true
+    if ! git -C "$DIR" pull --ff-only; then
+        if [ -z "$(git -C "$DIR" status --porcelain 2>/dev/null)" ]; then
+            echo "[ArabicSubs] checkout is clean — resetting to the latest code"
+            git -C "$DIR" reset --hard FETCH_HEAD
+        else
+            echo "[ArabicSubs] WARNING: your checkout has local changes — keeping them:"
+            git -C "$DIR" status --short | head -20
+        fi
+    fi
 else
     rm -rf "$DIR"
     git clone "$REPO" "$DIR"
@@ -31,7 +48,7 @@ fi
 cd "$DIR"
 
 step "3/5  node dependencies"
-npm install
+npm install || echo "[ArabicSubs] warning: npm install reported errors — continuing"
 
 step "4/5  llama-server + whisper (+ cmake repair if the toolchain is broken)"
 ARABIC_SUBS_SKIP_UPDATE=1 bash scripts/setup-termux.sh

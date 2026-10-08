@@ -112,6 +112,15 @@ printf '  %-14s %s\n' "whisper" "$(command -v whisper-cli || command -v whisper 
 
 # ── 5. models — only with the user's permission ────────────────────────────
 step "models (Hy-MT2 440 MB + whisper 150 MB)"
+
+models_ready() {
+    node -e 'const m=require(process.argv[1]);process.exit(m.modelStatus().state==="ready"&&m.whisperStatus().state==="ready"?0:1)' \
+        "$ROOT/src/model.js" 2>/dev/null
+}
+
+if models_ready; then
+    echo "[setup]   both models already present — nothing to download"
+else
 echo "[setup]   Hy-MT2 model card: https://huggingface.co/tencent/Hy-MT2-1.8B"
 echo "[setup]   both models feed ONE engine: subtitles and audio alike"
 echo "[setup]   stored in: \$HOME/.arabic-subs/models (download once, reused forever)"
@@ -145,6 +154,7 @@ case "$ANSWER" in
         echo "[setup]   (run will ask again before downloading)"
         ;;
 esac
+fi
 
 echo
 echo "[setup] done. Start the engine with:"

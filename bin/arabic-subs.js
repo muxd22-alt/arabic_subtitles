@@ -117,6 +117,15 @@ const HF_MODEL_CARD = 'https://huggingface.co/tencent/Hy-MT2-1.8B';
 const HF_MODEL_REPO = 'https://huggingface.co/tencent/Hy-MT2-1.8B-1.25Bit-GGUF';
 const HF_WHISPER_REPO = 'https://huggingface.co/ggerganov/whisper.cpp';
 
+/** The one line that installs/repairs everything — same string the app copies. */
+const SETUP_ONE_LINER = 'pkg install -y curl; curl -fsSL -o ArabicSubs.sh '
+    + 'https://raw.githubusercontent.com/muxd22-alt/arabic_subtitles/main/ArabicSubs.sh; bash ArabicSubs.sh';
+
+function printSetupHint() {
+    console.log('[Engine] Fix everything with one line:');
+    console.log(`[Engine]   ${SETUP_ONE_LINER}`);
+}
+
 function isYes(value) {
     return value === true || value === 'true' || value === 'y' || value === 'yes';
 }
@@ -138,14 +147,21 @@ function ask(question) {
 }
 
 async function ensureDownloads(flags) {
-    const model = modelStatus();
-    const needModel = model.state !== 'ready';
-    const haveWhisperBin = Boolean(findWhisper());
-    const needWhisper = haveWhisperBin && whisperStatus().state !== 'ready';
+    let model = modelStatus();
+    let needModel = model.state !== 'ready';
+    let needWhisper = Boolean(findWhisper()) && whisperStatus().state !== 'ready';
 
-    if (!haveWhisperBin) {
+    // whisper-cli missing → offer the setup that builds it (y/N, never forced)
+    if (!findWhisper() && flags['no-download'] !== true) {
         console.log('[Engine] whisper-cli not found — videos with no subtitle at all will be skipped.');
-        console.log('[Engine] Fix it with: bash ~/ArabicSubs.sh');
+        if (await offerFullSetup(flags)) {
+            console.log(findWhisper()
+                ? '[Engine] whisper-cli installed.'
+                : '[Engine] whisper-cli still missing — the audio path stays disabled.');
+        }
+        model = modelStatus();
+        needModel = model.state !== 'ready';
+        needWhisper = Boolean(findWhisper()) && whisperStatus().state !== 'ready';
     }
 
     if (!needModel && !needWhisper) return true;
@@ -220,7 +236,37 @@ async function runCommand(cmd, args) {
     });
 }
 
-/** llama-server runs Hy-MT2. Offer the Termux package instead of just failing. */
+/**
+ * Run scripts/setup-termux.sh: repairs a broken cmake, installs llama-server,
+ * builds whisper.cpp and asks before the model downloads.
+ * y/N, never forced, skipped entirely with --no-download.
+ */
+async function offerFullSetup(flags) {
+    const setup = path.join(config.ROOT, 'scripts', 'setup-termux.sh');
+    if (flags['no-download'] === true) return false;
+    if (!fs.existsSync(setup)) {
+        console.log(`[Engine] Setup script not found: ${setup}`);
+        printSetupHint();
+        return false;
+    }
+    if (!isYes(flags.yes)) {
+        const answer = await ask('[Engine] Run the full setup now (repairs cmake, builds llama-server + whisper)? [y/N] ');
+        if (answer === null) {
+            printSetupHint();
+            return false;
+        }
+        if (answer !== 'y') return false;
+    }
+    console.log('[Engine] Running: bash scripts/setup-termux.sh');
+    const code = await runCommand('bash', [setup]);
+    if (code !== 0) {
+        console.log(`[Engine] Setup exited with code ${code}.`);
+        printSetupHint();
+    }
+    return code === 0;
+}
+
+/** llama-server runs Hy-MT2: package first, full setup second — never just fail. */
 async function ensureLlamaServer(flags) {
     if (findLlamaServer()) return true;
 
@@ -228,33 +274,34 @@ async function ensureLlamaServer(flags) {
     console.log('[Engine] llama-server is not installed yet — it is the process that runs Hy-MT2.');
     if (!onTermux) {
         console.log('[Engine] Install llama-server (llama.cpp) and put it on PATH.');
+        printSetupHint();
         return false;
     }
 
-    let allowed = isYes(flags.yes);
-    if (!allowed) {
-        const answer = await ask('[Engine] Install the Termux package "llama-cpp" now? [y/N] ');
-        if (answer === null) {
-            console.log('[Engine] No terminal to ask — run: pkg install -y llama-cpp');
-            return false;
+    const answer = isYes(flags.yes) ? 'y'
+        : await ask('[Engine] Install the Termux package "llama-cpp" now? [y/N] ');
+    if (answer === null) {
+        printSetupHint();
+        return false;
+    }
+    if (answer === 'y') {
+        console.log('[Engine] Running: pkg install -y llama-cpp');
+        const code = await runCommand('pkg', ['install', '-y', 'llama-cpp']);
+        if (code === 0 && findLlamaServer()) {
+            console.log('[Engine] llama-server installed.');
+            return true;
         }
-        allowed = answer === 'y';
-    }
-    if (!allowed) {
-        console.log('[Engine] Install it yourself: pkg install -y llama-cpp');
-        return false;
+        console.log('[Engine] llama-cpp was not available from the package repo — building it instead.');
+    } else {
+        console.log('[Engine] Skipped the package — llama-server is required to translate.');
     }
 
-    console.log('[Engine] Running: pkg install -y llama-cpp');
-    const code = await runCommand('pkg', ['install', '-y', 'llama-cpp']);
-    if (code === 0 && findLlamaServer()) {
+    if (await offerFullSetup(flags) && findLlamaServer()) {
         console.log('[Engine] llama-server installed.');
         return true;
     }
 
-    console.log('[Engine] llama-cpp was not available from the package repo.');
-    console.log('[Engine] Run: bash ~/ArabicSubs.sh');
-    console.log('[Engine] (it repairs a broken cmake first, then builds llama.cpp)');
+    printSetupHint();
     return false;
 }
 
@@ -266,8 +313,8 @@ async function startServer(flags) {
     } catch (err) {
         if (/binary not found/i.test(err.message)) {
             console.error('[Engine] llama-server is not installed yet.');
-            console.error('[Engine] Run: bash ~/ArabicSubs.sh');
             console.error('[Engine] If cmake fails with a missing symbol, first run: pkg upgrade -y');
+            printSetupHint();
             return null;
         }
         throw err;

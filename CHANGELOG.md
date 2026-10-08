@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.6 — the engine fixes itself instead of printing an error
+
+- `run` / `translate` no longer stop at `llama-server is not installed yet`:
+  1. they offer the Termux package (`pkg install -y llama-cpp`),
+  2. if that fails or is declined they offer `scripts/setup-termux.sh`
+     (repairs a broken cmake, then builds llama.cpp from source),
+  3. only after both are refused do they print the one-line fix.
+- A missing `whisper-cli` now offers that same setup instead of only warning
+  that subtitle-less videos will be skipped.
+- With no terminal to ask, every path prints the `ArabicSubs.sh` one-liner
+  rather than a path the phone may not have.
+- `ArabicSubs.sh` no longer aborts on a noisy `pkg update` or `npm install`
+  (reported as warnings), resets a clean checkout to `FETCH_HEAD` when
+  `git pull --ff-only` cannot fast-forward, and a trap names the line that
+  failed so re-running resumes there.
+- `scripts/setup-termux.sh` skips the download prompt entirely when both
+  models are already present.
+- Engine only — `git pull` picks this up, no new APK.
+
 ## 1.1.5 — ArabicSubs.sh: the whole setup in one file
 
 - New `ArabicSubs.sh` at the repo root — packages, code, npm deps,
