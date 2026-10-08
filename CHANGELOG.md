@@ -2,8 +2,12 @@
 
 ## Unreleased
 
+- `run` / `translate` now offer to install `llama-server` themselves: when the
+  binary is missing on Termux they ask `Install the Termux package "llama-cpp"
+  now? [y/N]` and run `pkg install -y llama-cpp` for you, falling back to
+  `bash scripts/setup-termux.sh` only if the package cannot be used.
 - Watermark wording corrected: the first cue now reads
-  `[ ترجمة الأداة عربي سبس ]` (was `ترجمت`). Engine only — no new APK needed,
+  `[ ترجمة الأداة عربي سبس ]` (was `ترجمت`). Engine only - no new APK needed,
   `git pull` picks it up on the next run.
 
 ## 1.1.3 — self-updating setup, guards that survive the clipboard

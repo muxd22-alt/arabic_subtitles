@@ -210,7 +210,54 @@ async function ensureDownloads(flags) {
     return true;
 }
 
-/** Start llama-server, translating the "binary missing" failure into a next step. */
+/** Start llama-server, translating the "binary not found" failure into a next step. */
+async function runCommand(cmd, args) {
+    const { spawn } = require('child_process');
+    return new Promise((resolve) => {
+        const child = spawn(cmd, args, { stdio: 'inherit' });
+        child.on('error', () => resolve(-1));
+        child.on('close', (code) => resolve(typeof code === 'number' ? code : -1));
+    });
+}
+
+/** llama-server runs Hy-MT2. Offer the Termux package instead of just failing. */
+async function ensureLlamaServer(flags) {
+    if (findLlamaServer()) return true;
+
+    const onTermux = Boolean(process.env.PREFIX) && process.platform !== 'win32';
+    console.log('[Engine] llama-server is not installed yet — it is the process that runs Hy-MT2.');
+    if (!onTermux) {
+        console.log('[Engine] Install it: bash scripts/setup-termux.sh');
+        return false;
+    }
+
+    let allowed = isYes(flags.yes);
+    if (!allowed) {
+        const answer = await ask('[Engine] Install the Termux package "llama-cpp" now? [y/N] ');
+        if (answer === null) {
+            console.log('[Engine] No terminal to ask — run: pkg install -y llama-cpp');
+            return false;
+        }
+        allowed = answer === 'y';
+    }
+    if (!allowed) {
+        console.log('[Engine] Install it yourself: pkg install -y llama-cpp');
+        return false;
+    }
+
+    console.log('[Engine] Running: pkg install -y llama-cpp');
+    const code = await runCommand('pkg', ['install', '-y', 'llama-cpp']);
+    if (code === 0 && findLlamaServer()) {
+        console.log('[Engine] llama-server installed.');
+        return true;
+    }
+
+    console.log('[Engine] llama-cpp was not available from the package repo.');
+    console.log('[Engine] Run: bash scripts/setup-termux.sh');
+    console.log('[Engine] (it repairs a broken cmake first, then builds llama.cpp)');
+    return false;
+}
+
 async function startServer(flags) {
     const server = new LlamaServer();
     console.log('[Engine] Starting llama-server with Hy-MT2…');
@@ -240,6 +287,7 @@ async function cmdRun(args) {
     if (mediaArgs.length === 0) mediaArgs.push('/sdcard/Movies');
 
     if (!(await ensureDownloads(args.flags))) return 1;
+    if (!(await ensureLlamaServer(args.flags))) return 1;
 
     const server = await startServer(args.flags);
     if (!server) return 1;
@@ -330,6 +378,7 @@ async function cmdTranslate(args) {
     }
 
     if (!(await ensureDownloads(args.flags))) return 1;
+    if (!(await ensureLlamaServer(args.flags))) return 1;
 
     const server = await startServer(args.flags);
     if (!server) return 1;
