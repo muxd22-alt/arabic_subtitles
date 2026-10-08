@@ -62,6 +62,11 @@ videos are still missing Arabic subtitles, launch the engine through Termux's
 `RUN_COMMAND` intent, and watch live progress — the engine serves a status API
 on `http://127.0.0.1:18435/status` that the app polls.
 
+Pick your first folder and the app opens a **step-by-step wizard** that walks you
+through Termux one command at a time: each command is copied to the clipboard
+automatically, and one tap sends it to Termux. Grab the APK from the
+[latest release](https://github.com/muxd22-alt/arabic_subtitles/releases/latest).
+
 ## CLI
 
 ```text

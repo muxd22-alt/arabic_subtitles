@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.1.0 — Termux step-by-step wizard + Thmanyah landing page
+
+### App (Android)
+
+- **`SetupWizard`** — after the first folder is picked the app opens a one-step-at-a-time
+  onboarding dialog: progress bar, plain-language hint, and the exact command for that step.
+- **Auto-copy** — every time a step is shown its command is written to the clipboard
+  (toggleable per step), with a "paste it in Termux" confirmation and a manual copy button.
+- **Run in Termux** — commands are sent straight to Termux's `RUN_COMMAND` service; if
+  Termux is missing the app falls back to copy + open Termux, or reports that F-Droid is needed.
+- Last step is rebuilt from the folders you actually picked (`--media` per folder).
+- New dashboard button **"الإعداد خطوة بخطوة مع تيرمكس"** and a list icon in the top bar
+  reopen the wizard at any time; the old Termux setup dialog stays behind the gear icon.
+- `versionCode 2`, `versionName 1.1.0`.
+
+### Docs
+
+- Landing page rewritten around the **Thmanyah Sans** family (bundled in `docs/fonts/`),
+  gold-on-dark identity matching the app, RTL throughout, preload hints for the OTFs.
+- `docs/.nojekyll` added.
+
+### Fixes
+
+- Kotlin: `@OptIn(ExperimentalMaterial3Api::class)` on `onCreate` — the release build no
+  longer fails on the experimental `TopAppBar` APIs.
+- GitHub Pages switched to `build_type: workflow` so `configure-pages` succeeds and the
+  site is deployed from the Actions workflow instead of the legacy `/docs` auto-build.
+
 ## 1.0.0 — ground-up rebuild: Arabic Subs (offline EN→AR translation)
 
 The project was renamed from **SubArabify** to **Arabic Subs / arabic_subtitles**

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -70,6 +71,8 @@ class MainActivity : ComponentActivity() {
     private var skippedCount by mutableStateOf(0)
     private var isScanning by mutableStateOf(false)
     private var showSetupDialog by mutableStateOf(false)
+    private var showWizard by mutableStateOf(false)
+    private var autoCopy by mutableStateOf(true)
 
     // engine status polled from the node status server (127.0.0.1:18435)
     private var engineState by mutableStateOf<EngineStatus?>(null)
@@ -100,6 +103,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         startStatusPolling()
@@ -123,7 +127,7 @@ class MainActivity : ComponentActivity() {
                                         color = Gold500.copy(alpha = 0.15f),
                                     ) {
                                         Text(
-                                            "v1.0.0",
+                                            "v1.1.0",
                                             color = Gold500,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
@@ -133,6 +137,9 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             actions = {
+                                IconButton(onClick = { showWizard = true }) {
+                                    Icon(Icons.Default.List, contentDescription = "الإعداد خطوة بخطوة", tint = Gold500)
+                                }
                                 IconButton(onClick = { showSetupDialog = true }) {
                                     Icon(Icons.Default.Settings, contentDescription = "إعداد تيرمكس", tint = TextSecondary)
                                 }
@@ -148,6 +155,14 @@ class MainActivity : ComponentActivity() {
                         DashboardScreen(context)
                         if (showSetupDialog) {
                             TermuxSetupDialog(onDismiss = { showSetupDialog = false })
+                        }
+                        if (showWizard) {
+                            SetupWizard(
+                                mediaPaths = folders.map { it.rawPath },
+                                autoCopy = autoCopy,
+                                onAutoCopyChange = { autoCopy = it },
+                                onDismiss = { showWizard = false }
+                            )
                         }
                     }
                 }
@@ -216,6 +231,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "المجلد مضاف مسبقاً", Toast.LENGTH_SHORT).show()
             return
         }
+        val firstFolder = folders.isEmpty()
         folders.add(
             MediaFolder(
                 id = uri.toString(),
@@ -224,6 +240,8 @@ class MainActivity : ComponentActivity() {
             )
         )
         scanFolders()
+        // first folder chosen → walk the user through Termux, line by line
+        if (firstFolder) showWizard = true
     }
 
     // ── Engine launch ─────────────────────────────────────────────────
@@ -351,6 +369,20 @@ class MainActivity : ComponentActivity() {
                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
             ) {
                 Text("📂  إضافة مجلد أفلام / مسلسلات", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = DarkBg)
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // one-line-at-a-time Termux walkthrough
+            OutlinedButton(
+                onClick = { showWizard = true },
+                modifier = Modifier.fillMaxWidth().height(46.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Gold500.copy(alpha = 0.6f))
+            ) {
+                Icon(Icons.Default.List, contentDescription = null, tint = Gold500, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("الإعداد خطوة بخطوة مع تيرمكس", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Gold500)
             }
 
             Spacer(modifier = Modifier.height(12.dp))

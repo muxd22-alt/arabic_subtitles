@@ -3,131 +3,178 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>عربي سبس | ترجمة تلقائية بالذكاء الاصطناعي دون اتصال</title>
-  <meta name="description" content="عربي سبس — أداة ترجمة تلقائية تعمل بالكامل على هاتفك عبر تيرمكس، تحوّل الترجمات الإنجليزية إلى عربية باستخدام نموذج Hy-MT2 و ffmpeg و whisper.cpp دون أي خدمة سحابية." />
+  <title>عربي سبس — ترجمة تلقائية بالكامل على هاتفك</title>
+  <meta name="description" content="عربي سبس: أداة ترجمة تلقائية تعمل دون إنترنت داخل تيرمكس، تحوّل الترجمات الإنجليزية إلى عربية بنموذج Hy-MT2 وتستخرج الكلام عبر ffmpeg و whisper.cpp." />
+  <meta name="theme-color" content="#0a0e14">
+
+  <link rel="icon" href="ArabicSubs.png">
+  <link rel="preload" href="fonts/thmanyah_sans_regular.otf" as="font" type="font/otf" crossorigin>
+  <link rel="preload" href="fonts/thmanyah_sans_black.otf" as="font" type="font/otf" crossorigin>
+  <link rel="preload" href="fonts/thmanyah_sans_bold.otf" as="font" type="font/otf" crossorigin>
+
   <link rel="stylesheet" href="style.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;600;800&family=Cairo:wght@400;700&display=swap" rel="stylesheet">
-  <style>
-    body, h1, h2, h3, p, a, div { font-family: 'Cairo', 'Inter', sans-serif !important; }
-    .navbar { direction: rtl; }
-    .nav-links { display: flex; gap: 15px; }
-    code { direction: ltr; display: inline-block; }
-    pre { direction: ltr; text-align: left; }
-  </style>
 </head>
 <body>
 
-  <!-- Navigation -->
+  <!-- ══ Navbar ══ -->
   <nav class="navbar">
     <div class="logo">
-      <img src="ArabicSubs.png" alt="شعار عربي سبس" />
-      <span>عربي سبس</span>
+      <img src="ArabicSubs.png" alt="شعار عربي سبس">
+      <span>عربي <b>سبس</b></span>
     </div>
-    <div class="nav-links">
-      <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn-primary" style="background-color: #333;">تحميل ملف APK</a>
-      <a href="https://github.com/muxd22-alt/arabic_subtitles" class="btn-primary">الكود المصدري</a>
+    <div class="nav-actions">
+      <a href="#features" class="btn btn-ghost btn-sm">المميزات</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles" class="btn btn-ghost btn-sm">الكود</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn btn-gold btn-sm">تحميل APK</a>
     </div>
   </nav>
 
-  <!-- Hero -->
-  <section class="hero">
-    <div class="hero-content">
-      <h1>ترجمة تلقائية<br />تعمل بالكامل على هاتفك</h1>
+  <!-- ══ Hero ══ -->
+  <header class="hero">
+    <div>
+      <div class="hero-badge">◆ يعمل بالكامل دون إنترنت — بدون حسابات ولا تكاليف</div>
+
+      <h1>ترجمة أفلامك ومسلسلاتك<br><em>على هاتفك نفسه</em></h1>
+
       <p>
-        أداة <strong>دون اتصال بالإنترنت</strong> تحوّل الترجمات الإنجليزية إلى عربية
-        لمسلسلاتك وأفلامك باستخدام نموذج <strong>Hy-MT2</strong> المحمّل محلياً،
-        وتستخرج الكلام من الفيديو الذي لا يملك ترجمة عبر <strong>ffmpeg</strong> و
-        <strong>whisper.cpp</strong> — بدون أي خدمة سحابية أو حسابات أو تكاليف.
+        اختر مجلداتك في التطبيق، وسيتولّى المحرك الباقي: يقرأ الترجمة الإنجليزية
+        أو يستخرج الكلام من الصوت، ثم يترجمه إلى العربية عبر نموذج
+        <b>Hy-MT2</b> المحمّل محلياً — ويحفظ الملف جاهزاً بجانب الفيديو.
       </p>
-      <div class="hero-buttons">
-        <a href="https://github.com/muxd22-alt/arabic_subtitles" class="btn-primary">ابدأ الآن</a>
-        <a href="https://github.com/muxd22-alt/arabic_subtitles#quick-start-termux" class="btn-secondary">دليل التثبيت</a>
+
+      <div class="hero-actions">
+        <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn btn-gold">⬇ تحميل التطبيق</a>
+        <a href="#install" class="btn btn-ghost">التثبيت في تيرمكس</a>
+      </div>
+
+      <div class="hero-note">
+        الناتج: <span dir="ltr" style="font-family: var(--mono); color: var(--green);">Movie.ArabicSubs.ar.srt</span>
+        &nbsp;·&nbsp; علامة مائية: <span dir="ltr">[ ترجمت الأداة عربي سبس ]</span>
       </div>
     </div>
-  </section>
+  </header>
 
-  <!-- How it works -->
-  <section class="features">
-    <h2>كيف تعمل؟</h2>
+  <!-- ══ Features ══ -->
+  <section class="features" id="features">
+    <h2 class="section-title">ماذا يفعل؟</h2>
+    <p class="section-sub">
+      خط أنابيب واحد يختار المصدر المناسب لكل فيديو تلقائياً، ويسجّل سبب كل قرار.
+    </p>
+
     <div class="feature-grid">
       <div class="feature-card">
-        <div class="feature-icon">🎬</div>
-        <h3>اختر المجلدات</h3>
-        <p>حدّد مجلدات الأفلام والمسلسلات من خلال تطبيق المرافق أو مباشرة من تيرمكس.</p>
+        <div class="feature-icon">📂</div>
+        <h3>اختر مجلداتك</h3>
+        <p>أضف مجلدات الأفلام والمسلسلات من التطبيق، ويتعرّف المحرك على كل ملف فيديو وترجماته تلقائياً.</p>
       </div>
+
       <div class="feature-card">
         <div class="feature-icon">🧠</div>
-        <h3>ترجمة محلية</h3>
-        <p>نموذج Hy-MT2 بحجم 440 ميجابايت يعمل داخل llama-server على معالج/معالج رسومي هاتفك.</p>
+        <h3>ترجمة محلية بـ Hy-MT2</h3>
+        <p>نموذج ترجمة بحجم ~440MB يعمل داخل llama-server على معالج هاتفك — لا سحابة ولا إنترنت.</p>
       </div>
+
       <div class="feature-card">
         <div class="feature-icon">🎙️</div>
-        <h3>من الصوت إلى النص</h3>
-        <p>الفيديوهات بلا ترجمة تُقطَّع إلى مقاطع متوازية وتُفكَّ عبر whisper.cpp ثم تُترجَم.</p>
+        <h3>من الصوت إلى نص</h3>
+        <p>الفيديو بلا ترجمة؟ يُقطَّع الصوت إلى مقاطع متوازية، يُفكّ عبر whisper.cpp، ثم يُترجَم.</p>
       </div>
+
       <div class="feature-card">
         <div class="feature-icon">⚡</div>
         <h3>معالجة متوازية</h3>
-        <p>مقاطع الترجمة تُرسل على 4 مسارات بالتوازي، ومقاطع الصوت تُستخرج بالتوازي أيضاً.</p>
+        <p>دفعات ترجمة على 4 مسارات بالتوازي واستخراج صوت متوازي، مع إعادة محاولة تلقائية للدفعات الفاشلة.</p>
       </div>
+
       <div class="feature-card">
-        <div class="feature-icon">📁</div>
-        <h3>ملف جاهز بجانب الفيديو</h3>
-        <p>النتيجة <span style="direction: ltr; display: inline-block;">Movie.ArabicSubs.ar.srt</span> مع علامة مائية — لا يمسّ الفيديو نفسه.</p>
+        <div class="feature-icon">🧭</div>
+        <h3>دليل خطوة بخطوة</h3>
+        <p>التطبيق يمشي معك سطراً بسطر داخل تيرمكس: نسخ تلقائي للأوامر وتشغيل مباشر بضغطة واحدة.</p>
       </div>
+
       <div class="feature-card">
         <div class="feature-icon">📊</div>
-        <h3>سجل قرارات</h3>
-        <p>كل قرار (ترجمة، تخطي، سبب الفشل) يُسجَّل في <span style="direction: ltr; display: inline-block;">logs/decisions.jsonl</span>.</p>
+        <h3>حالة مباشرة</h3>
+        <p>تتبّع المحرك لحظياً داخل التطبيق: الملف الحالي، عدد الترجمات، وأي فشل — عبر واجهة محلية.</p>
       </div>
     </div>
   </section>
 
-  <!-- Pipeline -->
-  <section class="pipeline">
-    <h2>ترتيب المصادر</h2>
+  <!-- ══ Pipeline ══ -->
+  <section>
+    <h2 class="section-title">ترتيب المصادر لكل فيديو</h2>
+    <p class="section-sub">يتوقّف عند أول مصدر متاح — وكل قرار يُسجَّل في <span dir="ltr">logs/decisions.jsonl</span>.</p>
+
     <div class="pipeline-steps">
-      <div class="step">١. المخرج موجود مسبقاً ← تخطٍّ</div>
-      <div class="step">٢. ترجمة عربية جاهزة ← لصق العلامة المائية</div>
-      <div class="step">٣. ترجمة إنجليزية ← ترجمة عبر Hy-MT2</div>
-      <div class="step">٤. مسار ترجمة مضمّن ← ترجمة عبر Hy-MT2</div>
-      <div class="step">٥. لا شيء ← استخراج الصوت ← whisper.cpp ← ترجمة</div>
-      <div class="step">٦. لا صوت ولا ترجمة ← تسجيل السبب والتخطي</div>
+      <div class="step"><span>الملف موجود مسبقاً ← تخطٍّ (عدم التكرار)</span></div>
+      <div class="step"><span>ترجمة عربية جاهزة بجانب الفيديو ← لصق العلامة المائية</span></div>
+      <div class="step"><span>ترجمة إنجليزية ← ترجمتها بالكامل عبر Hy-MT2</span></div>
+      <div class="step"><span>ترجمة مضمّنة داخل الملف ← استخراجها ثم ترجمتها</span></div>
+      <div class="step"><span>لا شيء ← استخراج الصوت ← whisper ← ترجمة</span></div>
+      <div class="step"><span>لا صوت ولا ترجمة ← تسجيل السبب والتخطي</span></div>
     </div>
-    <pre><code>$ node bin/arabic-subs.js run --media /sdcard/Movies
-[Engine] Watching /sdcard/Movies
-[Queue] → Interstellar.2014.mkv (0 waiting)
-[Stage] Interstellar.2014.mkv → translate (1842 cues)
-[Translate] 1842 lines done
-[Queue] ✓ Interstellar.2014.mkv [translated]
-[Success] Interstellar.2014.ArabicSubs.ar.srt saved.</code></pre>
+
+    <div class="term">
+      <div class="term-bar">
+        <i class="dot r"></i><i class="dot y"></i><i class="dot g"></i>
+        <span>termux — arabic-subs</span>
+      </div>
+      <pre><span class="cmd">$</span> node bin/arabic-subs.js run --media /sdcard/Movies
+<span class="dim">[Engine]</span> Watching /sdcard/Movies
+<span class="dim">[Queue]</span> → Interstellar.2014.mkv (0 waiting)
+<span class="dim">[Stage]</span> Interstellar.2014.mkv → translate (1842 cues)
+<span class="ok">[Translate]</span> 1842 lines done
+<span class="ok">[Queue]</span> ✓ Interstellar.2014.mkv [translated]
+<span class="gold">[Success]</span> Interstellar.2014.ArabicSubs.ar.srt saved.</pre>
+    </div>
   </section>
 
-  <!-- Install -->
-  <section class="install">
-    <h2>التثبيت على تيرمكس</h2>
-    <pre><code>termux-setup-storage
-pkg update && pkg install nodejs ffmpeg -y
-git clone https://github.com/muxd22-alt/arabic_subtitles.git
-cd arabic_subtitles && npm install
-bash scripts/setup-termux.sh
-node bin/arabic-subs.js run --media /sdcard/Movies</code></pre>
+  <!-- ══ Install ══ -->
+  <section class="install" id="install">
+    <h2 class="section-title">التثبيت في تيرمكس</h2>
+    <p class="section-sub">أو افتح التطبيق واضغط «الإعداد خطوة بخطوة» لي-copy لك كل أمر سطراً بسطر.</p>
+
+    <div class="term">
+      <div class="term-bar">
+        <i class="dot r"></i><i class="dot y"></i><i class="dot g"></i>
+        <span>install</span>
+      </div>
+      <pre><span class="dim"># 1. الإذن + الحزم</span>
+<span class="cmd">$</span> termux-setup-storage
+<span class="cmd">$</span> pkg update && pkg install nodejs ffmpeg -y
+
+<span class="dim"># 2. المشروع + النماذج (~440MB)</span>
+<span class="cmd">$</span> git clone https://github.com/muxd22-alt/arabic_subtitles.git
+<span class="cmd">$</span> cd arabic_subtitles && npm install
+<span class="cmd">$</span> bash scripts/setup-termux.sh
+
+<span class="dim"># 3. التشغيل</span>
+<span class="cmd">$</span> node bin/arabic-subs.js run --media /sdcard/Movies</pre>
+    </div>
+
     <p class="note">
-      ملاحظة: ثبّت تيرمكس من <a href="https://f-droid.org/packages/com.termux/">F-Droid</a>
-      وليس من متجر Google Play.
+      ثبّت تيرمكس من <a href="https://f-droid.org/packages/com.termux/">F-Droid</a>
+      وليس من Google Play، وإلا لن تعمل أوامر النسخ التلقائي.
     </p>
+
+    <div class="apk-card">
+      <div class="meta">
+        <h3>تطبيق المرافق Android <span class="chip">v1.1.0</span></h3>
+        <p>اختيار المجلدات، مسح الفيديوهات، دليل خطوة بخطوة مع نسخ تلقائي، وتشغيل المحرك وحالته المباشرة.</p>
+      </div>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn btn-gold">⬇ تنزيل APK</a>
+    </div>
   </section>
 
-  <!-- Footer -->
+  <!-- ══ Footer ══ -->
   <footer>
     <div class="footer-links">
       <a href="https://github.com/muxd22-alt/arabic_subtitles">المستودع</a>
       <a href="https://github.com/muxd22-alt/arabic_subtitles/releases">الإصدارات</a>
       <a href="https://github.com/muxd22-alt/arabic_subtitles/issues">الإبلاغ عن مشكلة</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles#quick-start-termux">التوثيق</a>
     </div>
-    <p>عربي سبس — أداة مفتوحة المصدر برخصة MIT. تعمل بالكامل على جهازك.</p>
+    <p>عربي سبس — أداة مفتوحة المصدر برخصة MIT، تعمل بالكامل على جهازك.</p>
   </footer>
 
 </body>
