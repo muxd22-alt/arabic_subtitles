@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 
 sealed interface EngineMode {
     data class Run(val mediaPaths: List<String>, val slots: Int, val threads: Int) : EngineMode
@@ -51,8 +52,17 @@ data class EngineStatus(
 
 class EngineService : Service() {
 
-    @Volatile
+    // One lock guards the process handle, the worker thread, the run generation
+    // and the latest startId, and is the single writer lock for `_status`
+    // (see updateStatus). Every start/stop transition and every foreground
+    // hand-off happens inside it, so a superseded or stopped run can neither
+    // leak a child process nor clobber the current run's state.
+    private val lock = Any()
+
     private var process: Process? = null
+    private var worker: Thread? = null
+    private var runGeneration = 0
+    private var lastStartId = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -63,25 +73,53 @@ class EngineService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            stopEngine()
+            stopCurrent()
             return Service.START_NOT_STICKY
         }
 
         val mode = parseMode(intent)
         if (mode == null) {
-            _status.value = EngineStatus(failedToStart = "Missing engine mode")
-            stopSelf()
+            // No launch will be built, but the start-foreground contract still
+            // applies: show the notification, then stop this start.
+            synchronized(lock) {
+                runGeneration++
+                lastStartId = startId
+                startForegroundSafe(PREPARING)
+                updateStatus(null) { EngineStatus(failedToStart = "Missing engine mode") }
+                stopSelf(startId)
+            }
             return Service.START_NOT_STICKY
         }
 
-        _status.value = EngineStatus(running = true, stage = PREPARING)
-        startForegroundSafe(PREPARING)
-        Thread({ runEngine(mode) }, "engine").start()
+        var gen = 0
+        var previousWorker: Thread? = null
+        synchronized(lock) {
+            gen = ++runGeneration
+            lastStartId = startId
+            previousWorker = worker
+            val previous = process
+            process = null
+            worker = null
+            // Show the foreground notification before any bounded teardown wait,
+            // so we always beat the 5s start-foreground deadline.
+            startForegroundSafe(PREPARING)
+            updateStatus(null) { EngineStatus(running = true, stage = PREPARING) }
+            previous?.let { terminate(it) }
+        }
+        previousWorker?.let { joinQuietly(it) }
+        Thread({ runEngine(mode, gen) }, "engine").start()
         return Service.START_NOT_STICKY
     }
 
     override fun onDestroy() {
-        destroyProcess()
+        synchronized(lock) {
+            runGeneration++
+            val current = process
+            process = null
+            worker = null
+            current?.let { terminate(it) }
+        }
+        stopForegroundCompat()
         super.onDestroy()
     }
 
@@ -110,7 +148,7 @@ class EngineService : Service() {
         return assets.mainScript().absolutePath
     }
 
-    private fun runEngine(mode: EngineMode) {
+    private fun runEngine(mode: EngineMode, gen: Int) {
         val home = homeFor(mode)
         File(home).mkdirs()
 
@@ -124,17 +162,36 @@ class EngineService : Service() {
             builder.redirectErrorStream(true)
             started = builder.start()
         } catch (e: Exception) {
-            _status.value = EngineStatus(failedToStart = e.message ?: e.toString())
-            stopForegroundCompat()
-            stopSelf()
+            synchronized(lock) {
+                if (gen == runGeneration) {
+                    process = null
+                    worker = null
+                    updateStatus(gen) { EngineStatus(failedToStart = e.message ?: e.toString()) }
+                    stopForegroundCompat()
+                    stopSelf(lastStartId)
+                }
+            }
             return
         }
 
-        process = started
-        readStream(started)
+        if (!installCurrent(started, gen)) {
+            // superseded while we were preparing: never leave this child behind
+            terminate(started)
+            return
+        }
+        readStream(started, gen)
     }
 
-    private fun readStream(proc: Process) {
+    private fun installCurrent(proc: Process, gen: Int): Boolean {
+        synchronized(lock) {
+            if (gen != runGeneration) return false
+            process = proc
+            worker = Thread.currentThread()
+        }
+        return true
+    }
+
+    private fun readStream(proc: Process, gen: Int) {
         val output = EngineOutput()
         try {
             proc.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
@@ -142,7 +199,7 @@ class EngineService : Service() {
                 var read = reader.read(buffer)
                 while (read >= 0) {
                     if (read > 0) {
-                        for (event in output.feed(String(buffer, 0, read))) applyEvent(event)
+                        for (event in output.feed(String(buffer, 0, read))) applyEvent(gen, event)
                     }
                     read = reader.read(buffer)
                 }
@@ -157,46 +214,87 @@ class EngineService : Service() {
             Thread.currentThread().interrupt()
             -1
         }
-        _status.value = _status.value.copy(running = false, exitCode = exit)
-        stopForegroundCompat()
-        stopSelf()
-    }
 
-    private fun applyEvent(event: EngineEvent) {
-        when (event) {
-            is EngineEvent.Stage -> {
-                _status.value = _status.value.copy(stage = event.stage, lastLine = event.file)
-                getSystemService(NotificationManager::class.java)
-                    ?.notify(NOTIFICATION_ID, buildNotification(event.stage))
+        synchronized(lock) {
+            if (gen == runGeneration) {
+                process = null
+                worker = null
+                updateStatus(gen) { it.copy(running = false, exitCode = exit) }
+                stopForegroundCompat()
+                stopSelf(lastStartId)
             }
-            is EngineEvent.Asr ->
-                _status.value = _status.value.copy(lastLine = "ASR ${event.done}/${event.total}")
-            is EngineEvent.Translate ->
-                _status.value = _status.value.copy(
-                    lastLine = if (event.total == null) {
-                        "Translate ${event.done}"
-                    } else {
-                        "Translate ${event.done}/${event.total}"
-                    }
-                )
-            is EngineEvent.Queue ->
-                _status.value = _status.value.copy(lastLine = event.file)
-            is EngineEvent.Raw ->
-                _status.value = _status.value.copy(lastLine = event.line)
         }
     }
 
-    private fun stopEngine() {
-        stopForegroundCompat()
-        _status.value = _status.value.copy(running = false)
-        destroyProcess()
-        stopSelf()
+    private fun applyEvent(gen: Int, event: EngineEvent) {
+        when (event) {
+            is EngineEvent.Stage -> {
+                if (updateStatus(gen) { it.copy(stage = event.stage, lastLine = event.file) }) {
+                    getSystemService(NotificationManager::class.java)
+                        ?.notify(NOTIFICATION_ID, buildNotification(event.stage))
+                }
+            }
+            is EngineEvent.Asr ->
+                updateStatus(gen) { it.copy(lastLine = "ASR ${event.done}/${event.total}") }
+            is EngineEvent.Translate ->
+                updateStatus(gen) {
+                    it.copy(
+                        lastLine = if (event.total == null) {
+                            "Translate ${event.done}"
+                        } else {
+                            "Translate ${event.done}/${event.total}"
+                        }
+                    )
+                }
+            is EngineEvent.Queue ->
+                updateStatus(gen) { it.copy(lastLine = event.file) }
+            is EngineEvent.Raw ->
+                updateStatus(gen) { it.copy(lastLine = event.line) }
+        }
     }
 
-    private fun destroyProcess() {
-        val current = process
-        process = null
-        current?.destroy()
+    private fun stopCurrent() {
+        synchronized(lock) {
+            runGeneration++
+            val current = process
+            process = null
+            worker = null
+            updateStatus(null) { it.copy(running = false) }
+            current?.let { terminate(it) }
+            stopForegroundCompat()
+            stopSelf(lastStartId)
+        }
+    }
+
+    private fun terminate(proc: Process) {
+        proc.destroy()
+        try {
+            if (!proc.waitFor(DESTROY_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                proc.destroyForcibly()
+            }
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            proc.destroyForcibly()
+        }
+    }
+
+    private fun joinQuietly(target: Thread) {
+        try {
+            target.join(WORKER_JOIN_MS)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+    }
+
+    // The single place `_status` is ever assigned. A non-null `gen` publishes
+    // only while that run is still the current generation, so a superseded or
+    // stopped run can never resurrect `running = true`.
+    private fun updateStatus(gen: Int?, transform: (EngineStatus) -> EngineStatus): Boolean {
+        synchronized(lock) {
+            if (gen != null && gen != runGeneration) return false
+            _status.value = transform(_status.value)
+        }
+        return true
     }
 
     private fun createChannel() {
@@ -246,6 +344,8 @@ class EngineService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val PREPARING = "Preparing"
         private const val DEFAULT_MEDIA = "/storage/emulated/0/Movies"
+        private const val DESTROY_TIMEOUT_MS = 2000L
+        private const val WORKER_JOIN_MS = 1000L
 
         private val _status = MutableStateFlow(EngineStatus())
         val status: StateFlow<EngineStatus> = _status.asStateFlow()
