@@ -100,7 +100,7 @@ private class AssetManagerSource(
     override fun open(path: String): InputStream = assets.open("$base/$path")
 
     private fun list(path: String): List<String> =
-        runCatching { assets.list(path)?.toList() }.getOrDefault(emptyList())
+        runCatching { assets.list(path)?.toList() ?: emptyList<String>() }.getOrDefault(emptyList<String>())
 
     private fun canOpen(path: String): Boolean =
         try {
