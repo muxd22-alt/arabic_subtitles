@@ -28,6 +28,16 @@ val ksKeyPassword = secret("keyPassword", "KEY_PASSWORD")
 // ".signing/release.jks") must resolve against the root, not the app module.
 val hasKeystore = ksStoreFile != null && ksStorePassword != null && ksKeyAlias != null && ksKeyPassword != null
 
+// Keep assets/node/ in lock-step with the repo's Node engine sources. preBuild
+// depends on this, so every build refreshes the bundled copy.
+val syncNodeSources by tasks.registering(Copy::class) {
+    from(rootProject.file("bin")) { into("bin") }
+    from(rootProject.file("src")) { into("src") }
+    from(rootProject.file("package.json"))
+    into(layout.projectDirectory.dir("src/main/assets/node"))
+}
+tasks.named("preBuild") { dependsOn(syncNodeSources) }
+
 android {
     namespace = "com.arabicsubs"
     compileSdk = 35
@@ -72,6 +82,10 @@ android {
         kotlinCompilerExtensionVersion = libs.versions.composeCompiler.get()
     }
 
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -104,4 +118,7 @@ dependencies {
 
     // AndroidX Storage & DocumentFile for SAF directory traversal
     implementation("androidx.documentfile:documentfile:1.0.1")
+
+    // JVM unit tests
+    testImplementation("junit:junit:4.13.2")
 }
