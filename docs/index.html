@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>عربي سبس — ترجمة تلقائية بالكامل على هاتفك</title>
+  <meta name="description" content="عربي سبس: أداة ترجمة تلقائية تعمل دون إنترنت داخل تيرمكس، تحوّل الترجمات الإنجليزية إلى عربية بنموذج Hy-MT2 وتستخرج الكلام عبر ffmpeg و whisper.cpp في ثلاث خطوات فقط." />
+  <meta name="theme-color" content="#0a0e14">
+
+  <link rel="icon" href="ArabicSubs.png">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  <link rel="preload" href="fonts/thmanyah_sans_regular.otf" as="font" type="font/otf" crossorigin>
+  <link rel="preload" href="fonts/thmanyah_sans_black.otf" as="font" type="font/otf" crossorigin>
+  <link rel="preload" href="fonts/thmanyah_sans_bold.otf" as="font" type="font/otf" crossorigin>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ══ Navbar ══ -->
+  <nav class="navbar">
+    <div class="logo">
+      <img src="ArabicSubs.png" alt="شعار عربي سبس">
+      <span>عربي <b>سبس</b></span>
+    </div>
+    <div class="nav-actions">
+      <a href="#three-steps" class="btn btn-ghost btn-sm">الخطوات الثلاث</a>
+      <a href="#features" class="btn btn-ghost btn-sm">المميزات</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles" class="btn btn-ghost btn-sm">الكود</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn btn-gold btn-sm"><i class="material-icons">download</i> تحميل APK</a>
+    </div>
+  </nav>
+
+  <!-- ══ Hero ══ -->
+  <header class="hero">
+    <div>
+      <div class="hero-badge"><i class="material-icons">cloud_off</i> يعمل بالكامل دون إنترنت — ثلاث خطوات بسيطة</div>
+
+      <h1>ترجمة أفلامك ومسلسلاتك<br><em>على هاتفك نفسه</em></h1>
+
+      <p>
+        أمر واحد في تيرمكس، اختيار مجلد أفلامك، ثم نسخ الأمر وتشغيل المحرك.<br>
+        يترجم عبر نموذج <b>Hy-MT2</b> المحلّي ويستخرج الصوت عبر <b>whisper.cpp</b> — بنمط قائمة انتظار ذكي أو لفيلم محدد.
+      </p>
+
+      <div class="hero-actions">
+        <a href="#three-steps" class="btn btn-gold"><i class="material-icons">rocket_launch</i> الخطوات الثلاث للبدء</a>
+        <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn btn-ghost"><i class="material-icons">download</i> تحميل التطبيق (APK)</a>
+      </div>
+
+      <div class="hero-note">
+        الناتج: <span dir="ltr" style="font-family: var(--mono); color: var(--green);">Movie.ArabicSubs.ar.srt</span>
+        &nbsp;·&nbsp; علامة مائية: <span dir="ltr">[ ترجمة الأداة عربي سبس ]</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══ Three Steps Section ══ -->
+  <section class="steps-section" id="three-steps">
+    <h2 class="section-title">ثلاث خطوات واضحة وكل شيء جاهز</h2>
+    <p class="section-sub">
+      تصميم بسيط ومباشر: سطر أوامر واحد، اختيار المجلد، ونسخ الأمر للبدء فوراً.
+    </p>
+
+    <div class="steps-grid">
+      <!-- Step 1 -->
+      <div class="step-box">
+        <div class="step-header">
+          <div class="step-badge"><i class="material-icons">terminal</i></div>
+          <div class="step-title">سطر واحد في تيرمكس</div>
+        </div>
+        <p class="step-desc">
+          افتح تطبيق تيرمكس ونفّذ هذا الأمر لمرة واحدة. يقوم بتثبيت الحزم (git, nodejs, ffmpeg)، تنزيل محرك الترجمة الجاهز (‏16MB، بدون أي بناء على الهاتف)، وتنزيل النموذجين معاً (~1.2 جيجابايت — ترجمة + صوت) بأمان واستئناف تلقائي.
+        </p>
+        <div class="step-code-container">
+          <button class="copy-icon-btn" onclick="copySnippet(this, 'pkg install -y curl; curl -fsSL -o ArabicSubs.sh https://raw.githubusercontent.com/muxd22-alt/arabic_subtitles/main/ArabicSubs.sh; bash ArabicSubs.sh')"><i class="material-icons">content_copy</i> نسخ</button>
+          <code>pkg install -y curl; curl -fsSL -o ArabicSubs.sh https://raw.githubusercontent.com/muxd22-alt/arabic_subtitles/main/ArabicSubs.sh; bash ArabicSubs.sh</code>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="step-box">
+        <div class="step-header">
+          <div class="step-badge"><i class="material-icons">folder_open</i></div>
+          <div class="step-title">اختر مجلد الوسائط</div>
+        </div>
+        <p class="step-desc">
+          افتح تطبيق المرافق (عربي سبس) واضغط على «إضافة مجلد» لاختيار مسار الأفلام أو المسلسلات (مثل <span dir="ltr">/sdcard/Movies</span>). يفحص التطبيق الفيديوهات ويطابق ملفات الترجمة فوراً.
+        </p>
+        <div class="ui-features-pill">
+          <span class="pill-item"><i class="material-icons">folder</i> تخزين دائم SAF</span>
+          <span class="pill-item"><i class="material-icons">search</i> فحص متكرر للترجمات</span>
+          <span class="pill-item"><i class="material-icons">lock</i> خصوصية 100% دون سحابة</span>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="step-box">
+        <div class="step-header">
+          <div class="step-badge"><i class="material-icons">bolt</i></div>
+          <div class="step-title">ثلاثة أزرار بدل أمر واحد</div>
+        </div>
+        <p class="step-desc">
+          داخل التطبيق: «تثبيت / إصلاح المحرك» (مرة واحدة — ينزّل المحرك الجاهز ويتحقق منه)، «تشغيل قائمة الانتظار»، و«ترجمة ملف واحد». لا حاجة لبناء أي شيء على الهاتف.
+        </p>
+        <div class="step-code-container">
+          <button class="copy-icon-btn" onclick="copySnippet(this, 'cd ~/arabic_subtitles && node bin/arabic-subs.js run --media /sdcard/Movies')"><i class="material-icons">content_copy</i> نسخ</button>
+          <code>cd ~/arabic_subtitles &amp;&amp; node bin/arabic-subs.js run --media /sdcard/Movies</code>
+        </div>
+        <div class="ui-features-pill" style="margin-top: 14px;">
+          <span class="pill-item"><i class="material-icons">build</i> إصلاح المحرك</span>
+          <span class="pill-item"><i class="material-icons">playlist_play</i> تشغيل القائمة</span>
+          <span class="pill-item"><i class="material-icons">movie</i> ملف واحد</span>
+          <span class="pill-item"><i class="material-icons">movie</i> معالجة فيلم محدد</span>
+          <span class="pill-item"><i class="material-icons">cleaning_services</i> تنظيف وفحص الكل</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ Features ══ -->
+  <section class="features" id="features">
+    <h2 class="section-title">ماذا يميّز عربي سبس؟</h2>
+    <p class="section-sub">
+      خط أنابيب متكامل وذكي يوفّر لك أسرع طريقة لترجمة مكتبتك المرئية دون الاعتماد على أي خدمة مدفوعة.
+    </p>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon"><i class="material-icons">psychology</i></div>
+        <h3>ترجمة محلية بـ Hy-MT2</h3>
+        <p>نموذج ترجمة فائق الدقة (1.8B GGUF بترميز Q4_K_M بحجم ~1.06 جيجابايت) يعمل عبر llama-server على معالج جهازك مباشرة.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="material-icons">mic</i></div>
+        <h3>استخراج الصوت الذكي</h3>
+        <p>إذا لم يتوفر أي ملف ترجمة، يستخرج الصوت عبر ffmpeg ويُفك عبر whisper.cpp ثم يُترجم بسلاسة.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="material-icons">bolt</i></div>
+        <h3>دفعات ترجمة متوازية</h3>
+        <p>تقسيم الأسطر على 4 مسارات متوازية للترجمة مع معالجة ذكية لتداخل المقاطع الصوتية ومنع التكرار.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="material-icons">queue</i></div>
+        <h3>نمط قائمة الانتظار (Queue)</h3>
+        <p>معالجة الأفلام تباعاً لتجنب حرارة المعالج، مع إمكانية تحديد فيلم معين أو استبعاد أفلام محددة بسهولة.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="material-icons">cleaning_services</i></div>
+        <h3>تنظيف وفحص وإعادة تشغيل</h3>
+        <p>زر واحد داخل التطبيق لإعادة تنظيف حالات التخطي، مطابقة ملفات .ArabicSubs.ar.srt المنتهية، والانطلاق.</p>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-icon"><i class="material-icons">insights</i></div>
+        <h3>لوحة مراقبة حية</h3>
+        <p>تتبّع لحظي للترجمة الحالية، عدد الأسطر المكتملة، وحالة الخادم عبر واجهة محلية خفيفة وسريعة.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ Pipeline ══ -->
+  <section>
+    <h2 class="section-title">ترتيب فحص المصادر الذكي</h2>
+    <p class="section-sub">يتوقّف المحرك عند أول مصدر صالح ومتاح — ويسجّل كل قرار في <span dir="ltr">logs/decisions.jsonl</span>.</p>
+
+    <div class="pipeline-steps">
+      <div class="step"><i class="material-icons">check_circle</i> <span>1. الملف المترجم موجود مسبقاً (.ArabicSubs.ar.srt) ← تخطٍّ فوري لتوفير الوقت</span></div>
+      <div class="step"><i class="material-icons">branding_watermark</i> <span>2. ترجمة عربية جاهزة بجانب الفيديو (.ar.srt) ← وضع العلامة المائية والحفظ</span></div>
+      <div class="step"><i class="material-icons">translate</i> <span>3. ترجمة إنجليزية بجانب الفيديو (.en.srt) ← تجزئتها وترجمتها عبر Hy-MT2</span></div>
+      <div class="step"><i class="material-icons">video_library</i> <span>4. مسار ترجمة مدمج داخل الحاوية (MKV / MP4) ← استخراجه ثم ترجمته</span></div>
+      <div class="step"><i class="material-icons">graphic_eq</i> <span>5. لا توجد ترجمة ← تقطيع الصوت لمقاطع 5 دقائق ← تفريغ whisper ← ترجمة</span></div>
+      <div class="step"><i class="material-icons">skip_next</i> <span>6. لا يوجد صوت ولا ترجمة ← تسجيل التشخيص والتخطي بأمان</span></div>
+    </div>
+
+    <div class="term">
+      <div class="term-bar">
+        <i class="dot r"></i><i class="dot y"></i><i class="dot g"></i>
+        <span>termux — arabic-subs run</span>
+      </div>
+      <pre><span class="cmd">$</span> node bin/arabic-subs.js run --media /sdcard/Movies
+<span class="dim">[Engine]</span> Watching /sdcard/Movies
+<span class="dim">[Queue]</span> → Interstellar.2014.mkv (0 waiting)
+<span class="dim">[Stage]</span> Interstellar.2014.mkv → translate (1842 cues)
+<span class="ok">[Translate]</span> 1842 lines done
+<span class="ok">[Queue]</span> ✓ Interstellar.2014.mkv [translated]
+<span class="gold">[Success]</span> Interstellar.2014.ArabicSubs.ar.srt saved.</pre>
+    </div>
+  </section>
+
+  <!-- ══ Install ══ -->
+  <section class="install" id="install">
+    <h2 class="section-title">التثبيت في تيرمكس</h2>
+    <p class="section-sub">ملف إعداد تلقائي بالكامل — ينزّل كل الاعتماديات بأمان مع إمكانية الاستئناف عند انقطاع الاتصال.</p>
+
+    <div class="term">
+      <div class="term-bar">
+        <i class="dot r"></i><i class="dot y"></i><i class="dot g"></i>
+        <span>termux terminal</span>
+      </div>
+      <pre><span class="dim"># الأمر الموحد — انسخه والصقه في تيرمكس</span>
+<span class="cmd">$</span> pkg install -y curl; curl -fsSL -o ArabicSubs.sh https://raw.githubusercontent.com/muxd22-alt/arabic_subtitles/main/ArabicSubs.sh; bash ArabicSubs.sh
+
+<span class="dim">[ArabicSubs] 1/5  packages (git, nodejs, ffmpeg)</span>
+<span class="dim">[ArabicSubs] 2/5  code — clone or pull</span>
+<span class="dim">[ArabicSubs] 3/5  node dependencies</span>
+<span class="dim">[ArabicSubs] 4/5  engines downloaded (llama-server + whisper-cli)</span>
+<span class="dim">[setup]   Download models now? [y/N]</span> <span class="ok">y</span>
+<span class="dim">[ArabicSubs] 5/5  done!</span></pre>
+    </div>
+
+    <p class="note">
+      <i class="material-icons warning-icon">warning</i> تنبيه مهم: ثبّت تيرمكس من متجر <a href="https://f-droid.org/packages/com.termux/" target="_blank">F-Droid</a>
+      وليس من متجر Google Play (النسخة القديمة تمنع تشغيل الأوامر في الخلفية).
+    </p>
+
+    <div class="apk-card">
+      <div class="meta">
+        <h3>تطبيق المرافق Android <span class="chip">v2.2</span></h3>
+        <p>واجهة مريحة بهوية بصرية جديدة: إدارة قائمة الانتظار، اختيار المجلدات، ثلاثة أزرار واضحة (إصلاح المحرك، تشغيل القائمة، ملف واحد)، ومتابعة حالة المحرك مباشرة.</p>
+      </div>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn btn-gold"><i class="material-icons">download</i> تنزيل APK</a>
+    </div>
+  </section>
+
+  <!-- ══ Footer ══ -->
+  <footer>
+    <div class="footer-links">
+      <a href="https://github.com/muxd22-alt/arabic_subtitles">المستودع (GitHub)</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles/releases">الإصدارات</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles/issues">الإبلاغ عن مشكلة</a>
+      <a href="https://github.com/muxd22-alt/arabic_subtitles#readme">التوثيق الفني</a>
+    </div>
+    <p>عربي سبس — أداة مفتوحة المصدر برخصة MIT، تعمل بالكامل محلياً على جهازك.</p>
+  </footer>
+
+  <script>
+    function copySnippet(btn, text) {
+      navigator.clipboard.writeText(text).then(() => {
+        const origHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="material-icons">check</i> تم النسخ';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.innerHTML = origHtml;
+          btn.classList.remove('copied');
+        }, 2200);
+      });
+    }
+  </script>
+
+</body>
+</html>

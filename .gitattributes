@@ -1,0 +1,5 @@
+# Termux runs these straight from the checkout — they must stay LF everywhere
+*.sh text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.srt text eol=lf

@@ -1,0 +1,31 @@
+{
+  "name": "arabic-subs",
+  "version": "2.2.0",
+  "description": "Arabic Subs â€” offline ENâ†’AR subtitle factory for Termux powered by Hy-MT2 (llama.cpp), ffmpeg and whisper.cpp",
+  "main": "src/pipeline.js",
+  "bin": {
+    "arabic-subs": "bin/arabic-subs.js"
+  },
+  "scripts": {
+    "start": "node bin/arabic-subs.js run --media /sdcard/Movies",
+    "setup": "node bin/arabic-subs.js setup",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "subtitles",
+    "arabic",
+    "translation",
+    "hy-mt2",
+    "llama.cpp",
+    "termux",
+    "whisper",
+    "ffmpeg"
+  ],
+  "author": "muxd22-alt",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
