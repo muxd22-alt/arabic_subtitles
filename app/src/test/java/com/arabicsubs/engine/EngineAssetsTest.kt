@@ -63,4 +63,32 @@ class EngineAssetsTest {
         assertEquals(File(root, "bin/arabic-subs.js"), a.mainScript())
         assertTrue(a.mainScript().exists())
     }
+
+    @Test
+    fun copies_package_json_at_the_assets_root() {
+        val src = Files.createTempDirectory("src").toFile().apply {
+            File(this, "bin").mkdirs()
+            File(this, "bin/arabic-subs.js").writeText("//x")
+            File(this, "package.json").writeText("{\"name\":\"arabic-subs\"}")
+        }
+        val dest = Files.createTempDirectory("dest").toFile()
+
+        EngineAssets(src, "2.3.0").ensureExtracted(dest)
+
+        assertEquals("{\"name\":\"arabic-subs\"}", File(dest, "package.json").readText())
+    }
+
+    @Test
+    fun copies_nested_subdirectories_under_bin() {
+        val src = Files.createTempDirectory("src").toFile().apply {
+            File(this, "bin/lib").mkdirs()
+            File(this, "bin/arabic-subs.js").writeText("//x")
+            File(this, "bin/lib/helper.js").writeText("//h")
+        }
+        val dest = Files.createTempDirectory("dest").toFile()
+
+        EngineAssets(src, "2.3.0").ensureExtracted(dest)
+
+        assertEquals("//h", File(dest, "bin/lib/helper.js").readText())
+    }
 }
