@@ -117,6 +117,7 @@ class EngineService : Service() {
             val current = process
             process = null
             worker = null
+            updateStatus(null) { it.copy(running = false) }
             current?.let { terminate(it) }
         }
         stopForegroundCompat()
