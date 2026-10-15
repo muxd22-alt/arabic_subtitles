@@ -32,3 +32,6 @@ node_modules/
 # Runtime output
 logs/
 .arabic_subs_tmp/
+
+# Subagent-driven-development scratch (plan workspace, ledger, briefs, reviews)
+.superpowers/
