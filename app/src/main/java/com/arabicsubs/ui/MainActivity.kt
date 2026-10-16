@@ -1,8 +1,6 @@
 package com.arabicsubs.ui
 
 import android.app.Activity
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -12,20 +10,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
@@ -37,22 +30,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
+import com.arabicsubs.engine.EngineMode
+import com.arabicsubs.engine.EngineService
+import com.arabicsubs.storage.AllFilesAccess
 import com.arabicsubs.ui.theme.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 class MainActivity : ComponentActivity() {
 
@@ -76,28 +66,15 @@ class MainActivity : ComponentActivity() {
     private var pendingCount by mutableStateOf(0)
     private var skippedCount by mutableStateOf(0)
     private var isScanning by mutableStateOf(false)
-    private var showSetupDialog by mutableStateOf(false)
     private var showWizard by mutableStateOf(false)
-    private var autoCopy by mutableStateOf(true)
-    // how many videos the Termux engine works on at once (JOB_CONCURRENCY)
-    private var jobConcurrency by mutableStateOf(2)
+    // translation parallelism + llama slots for the one movie being worked on
+    private var slots by mutableStateOf(2)
 
     // the wizard only auto-opens the very first time, never again after "تم"
     private val prefs by lazy { getSharedPreferences("arabic_subs", Context.MODE_PRIVATE) }
 
-    // engine status polled from the node status server (127.0.0.1:18435)
-    private var engineState by mutableStateOf<EngineStatus?>(null)
-    private var statusJob: Job? = null
-
-    data class EngineStatus(
-        val running: Boolean,
-        val model: String,
-        val current: String?,
-        val done: Int,
-        val failed: Int,
-        val pending: Int,
-        val active: Int
-    )
+    private val threads: Int
+        get() = Runtime.getRuntime().availableProcessors().coerceIn(1, 8)
 
     private val folderPickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -118,9 +95,8 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        startStatusPolling()
-        jobConcurrency = prefs.getInt("job_concurrency", 2).coerceIn(1, 4)
-        // first launch → straight into the one-liner walkthrough
+        slots = prefs.getInt("slots", 2).coerceIn(1, 4)
+        // first launch → straight into the setup walkthrough
         if (!prefs.getBoolean("setup_done", false)) showWizard = true
         setContent {
             ArabicSubsTheme {
@@ -155,9 +131,6 @@ class MainActivity : ComponentActivity() {
                                 IconButton(onClick = { showWizard = true }) {
                                     Icon(Icons.Default.List, contentDescription = "الإعداد خطوة بخطوة", tint = AccentText)
                                 }
-                                IconButton(onClick = { showSetupDialog = true }) {
-                                    Icon(Icons.Default.Settings, contentDescription = "إعداد تيرمكس", tint = TextSecondary)
-                                }
                             },
                             colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
                         )
@@ -168,70 +141,19 @@ class MainActivity : ComponentActivity() {
                         color = DarkBg
                     ) {
                         DashboardScreen(context)
-                        if (showSetupDialog) {
-                            TermuxSetupDialog(onDismiss = { showSetupDialog = false })
-                        }
                         if (showWizard) {
                             SetupWizard(
                                 mediaPaths = folders.map { it.rawPath },
-        autoCopy = autoCopy,
-        onAutoCopyChange = { autoCopy = it },
-        onPickFolders = {
-            folderPickerLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE))
-        },
-        onDismiss = { showWizard = false },
-                                onCompleted = { prefs.edit().putBoolean("setup_done", true).apply() },
-                                suggestedFile = itemList.firstOrNull { !it.isDone && !it.isSkipped }?.fullPath
+                                onPickFolders = {
+                                    folderPickerLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE))
+                                },
+                                onDismiss = { showWizard = false },
+                                onCompleted = { prefs.edit().putBoolean("setup_done", true).apply() }
                             )
                         }
                     }
                 }
             }
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        statusJob?.cancel()
-    }
-
-    // ── Status polling ────────────────────────────────────────────────
-
-    private fun startStatusPolling() {
-        statusJob?.cancel()
-        statusJob = CoroutineScope(Dispatchers.IO).launch {
-            while (true) {
-                val status = fetchEngineStatus()
-                withContext(Dispatchers.Main) { engineState = status }
-                delay(3000)
-            }
-        }
-    }
-
-    private fun fetchEngineStatus(): EngineStatus? {
-        var conn: HttpURLConnection? = null
-        return try {
-            val url = URL("http://127.0.0.1:18435/status")
-            conn = url.openConnection() as HttpURLConnection
-            conn.connectTimeout = 1500
-            conn.readTimeout = 1500
-            if (conn.responseCode != 200) return null
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            val json = JSONObject(body)
-            val queue = json.optJSONObject("queue")
-            EngineStatus(
-                running = json.optString("engine") == "running",
-                model = json.optString("model"),
-                current = queue?.optString("current")?.takeIf { it.isNotEmpty() && it != "null" },
-                done = queue?.optInt("done") ?: 0,
-                failed = queue?.optInt("failed") ?: 0,
-                pending = queue?.optInt("pending") ?: 0,
-                active = queue?.optInt("active") ?: 0
-            )
-        } catch (e: Exception) {
-            null
-        } finally {
-            conn?.disconnect()
         }
     }
 
@@ -264,34 +186,34 @@ class MainActivity : ComponentActivity() {
 
     // ── Engine launch ─────────────────────────────────────────────────
 
-    /** How many videos the engine should work on at once, handed to the CLI. */
-    private fun chooseJobConcurrency(n: Int) {
-        jobConcurrency = n.coerceIn(1, 4)
-        prefs.edit().putInt("job_concurrency", jobConcurrency).apply()
+    /** Translation parallelism + llama slots for the single movie being worked on. */
+    private fun chooseSlots(n: Int) {
+        slots = n.coerceIn(1, 4)
+        prefs.edit().putInt("slots", slots).apply()
     }
 
-    private fun buildRunCommand(): String {
-        val mediaArgs = folders.joinToString(" ") { "--media \"${it.rawPath}\"" }
-        return "cd ~/arabic_subtitles && (git pull --ff-only 2>/dev/null || true) && " +
-            "JOB_CONCURRENCY=$jobConcurrency node bin/arabic-subs.js run $mediaArgs"
+    private fun runAllFolders(context: Context) {
+        if (folders.isEmpty()) {
+            Toast.makeText(context, "اختر مجلداً أولاً", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!ensureAllFilesAccess(context)) return
+        EngineService.start(context, EngineMode.Run(folders.map { it.rawPath }, slots, threads))
+        Toast.makeText(context, "بدأت الترجمة", Toast.LENGTH_SHORT).show()
     }
 
-    private fun buildSingleCommand(itemPath: String): String {
-        return "cd ~/arabic_subtitles && (git pull --ff-only 2>/dev/null || true) && " +
-            "JOB_CONCURRENCY=$jobConcurrency node bin/arabic-subs.js process \"$itemPath\""
+    private fun runSingleFile(context: Context, path: String) {
+        if (!ensureAllFilesAccess(context)) return
+        EngineService.start(context, EngineMode.Process(path, slots, threads))
+        Toast.makeText(context, "بدأت ترجمة هذا الملف", Toast.LENGTH_SHORT).show()
     }
 
-    /**
-     * "Fix engine" = run the setup script, which downloads the verified 16 MB
-     * prebuilt engine (no compiling on the phone) and re-links it on PATH. This
-     * is the answer to a crash or a missing llama-server — never a source build.
-     */
-    private fun launchEngineFix(context: Context) {
-        launchTermuxCommand(
-            context,
-            "cd ~/arabic_subtitles && (git pull --ff-only 2>/dev/null || true); bash scripts/setup-termux.sh",
-            "جاري تثبيت المحرك"
-        )
+    /** True when all-files access is granted; otherwise toasts and opens settings. */
+    private fun ensureAllFilesAccess(context: Context): Boolean {
+        if (AllFilesAccess.granted(context)) return true
+        Toast.makeText(context, "امنح الوصول إلى الملفات أولاً", Toast.LENGTH_SHORT).show()
+        context.startActivity(AllFilesAccess.settingsIntent(context))
+        return false
     }
 
     private fun recleanAndRescan() {
@@ -302,47 +224,6 @@ class MainActivity : ComponentActivity() {
         }
         scanFolders()
         Toast.makeText(this, "تم تنظيف قائمة الانتظار وإعادة الفحص", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun launchTermuxCommand(context: Context, cmd: String, okMessage: String) {
-        try {
-            val runIntent = Intent("com.termux.RUN_COMMAND").apply {
-                setClassName("com.termux", "com.termux.app.RunCommandService")
-                putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash")
-                putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf("-c", cmd))
-                putExtra("com.termux.RUN_COMMAND_BACKGROUND", false)
-            }
-            context.startService(runIntent)
-            Toast.makeText(context, okMessage, Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            val launchIntent = context.packageManager.getLaunchIntentForPackage("com.termux")
-            if (launchIntent != null) {
-                copyToClipboard(context, cmd)
-                context.startActivity(launchIntent)
-                Toast.makeText(context, "تم نسخ الأمر — الصقه في تيرمكس", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(context, "الرجاء تثبيت تيرمكس أولاً", Toast.LENGTH_SHORT).show()
-                showSetupDialog = true
-            }
-        }
-    }
-
-    private fun launchTermuxEngine(context: Context, singleFile: String? = null) {
-        if (folders.isEmpty() && singleFile == null) {
-            Toast.makeText(context, "اختر مجلداً أولاً", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val cmd = if (singleFile != null) {
-            buildSingleCommand(singleFile)
-        } else {
-            buildRunCommand()
-        }
-        launchTermuxCommand(context, cmd, "تم إرسال الأمر إلى تيرمكس")
-    }
-
-    private fun copyToClipboard(context: Context, text: String) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("Arabic Subs", text))
     }
 
     // ── Scanning ──────────────────────────────────────────────────────
@@ -511,8 +392,8 @@ class MainActivity : ComponentActivity() {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
-                        onClick = { launchTermuxEngine(context) },
-                        modifier = Modifier.weight(1.3f).height(50.dp),
+                        onClick = { runAllFolders(context) },
+                        modifier = Modifier.weight(1.4f).height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
@@ -523,19 +404,8 @@ class MainActivity : ComponentActivity() {
                     }
 
                     OutlinedButton(
-                        onClick = { launchEngineFix(context) },
-                        modifier = Modifier.weight(1.1f).height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, InfoCyan.copy(alpha = 0.5f))
-                    ) {
-                        Icon(Icons.Default.Build, contentDescription = null, tint = InfoCyan, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("إصلاح المحرك", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = InfoCyan)
-                    }
-
-                    OutlinedButton(
                         onClick = { recleanAndRescan() },
-                        modifier = Modifier.weight(1.2f).height(50.dp),
+                        modifier = Modifier.weight(1f).height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
                     ) {
@@ -591,12 +461,13 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun EngineStatusCard() {
-        val status = engineState
+        val status by EngineService.status.collectAsState()
         val (label, accent) = when {
-            status == null -> "المحرك: متوقف" to TextMuted
-            status.active > 1 -> "المحرك: يعمل — ${status.active} ملفات بالتوازي" to SuccessGreen
-            status.running && status.current != null -> "المحرك: يعمل — ${status.current}" to SuccessGreen
-            status.running -> "المحرك: جاهز (${status.done} ترجمة)" to InfoCyan
+            status.failedToStart != null -> "المحرك: تعذّر التشغيل" to ErrorRose
+            status.running && !status.stage.isNullOrEmpty() -> "المحرك: يعمل — ${status.stage}" to SuccessGreen
+            status.running -> "المحرك: يعمل" to SuccessGreen
+            status.exitCode == 0 -> "المحرك: انتهى بنجاح" to InfoCyan
+            status.exitCode != null -> "المحرك: انتهى (رمز ${status.exitCode})" to ErrorRose
             else -> "المحرك: متوقف" to TextMuted
         }
 
@@ -611,13 +482,25 @@ class MainActivity : ComponentActivity() {
             ) {
                 Box(modifier = Modifier.size(10.dp).background(accent, CircleShape))
                 Spacer(modifier = Modifier.width(10.dp))
-                Text(label, fontSize = 12.sp, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                if (status != null && (status.pending > 0 || status.failed > 0)) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "بانتظار ${status.pending}${if (status.failed > 0) " · فشل ${status.failed}" else ""}",
-                        fontSize = 11.sp,
-                        color = TextMuted
+                        label,
+                        fontSize = 12.sp,
+                        color = accent,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    val detail = status.failedToStart ?: status.lastLine
+                    if (!detail.isNullOrEmpty()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            detail,
+                            fontSize = 11.sp,
+                            color = TextMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
@@ -634,9 +517,9 @@ class MainActivity : ComponentActivity() {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Settings, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("ملفات متوازية", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("توازي الترجمة", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.weight(1f))
-                    Text("$jobConcurrency في وقت واحد", color = TextMuted, fontSize = 11.sp)
+                    Text("$slots", color = TextMuted, fontSize = 11.sp)
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
@@ -644,8 +527,8 @@ class MainActivity : ComponentActivity() {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     (1..4).forEach { n ->
-                        val selected = jobConcurrency == n
-                        val onClick = { chooseJobConcurrency(n) }
+                        val selected = slots == n
+                        val onClick = { chooseSlots(n) }
                         if (selected) {
                             Button(
                                 onClick = onClick,
@@ -671,7 +554,7 @@ class MainActivity : ComponentActivity() {
                 }
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    "يترجم عدة ملفات في وقت واحد على المحرك المحلي — أسرع للمكتبة، واختر ١ لتبريد الجهاز.",
+                    "يضبط عدد المقاطع المترجمة بالتوازي داخل الفيلم الواحد وعدد فتحات llama — الجودة نفسها لكن أسرع. اختر ١ لتقليل استهلاك الجهاز.",
                     color = TextMuted,
                     fontSize = 11.sp,
                     lineHeight = 16.sp
@@ -734,30 +617,8 @@ class MainActivity : ComponentActivity() {
 
                     if (!item.isSkipped) {
                         // a real button, so TalkBack announces it and the tap target is 48dp
-                        OutlinedButton(
-                            onClick = {
-                                copyToClipboard(context, buildSingleCommand(item.fullPath))
-                                Toast.makeText(context, "تم نسخ أمر هذا الملف", Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.height(Space.touch),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = Space.md),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Accent.copy(alpha = 0.45f))
-                        ) {
-                            Icon(
-                                Icons.Default.ContentCopy,
-                                contentDescription = null,
-                                tint = AccentText,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(Space.xs))
-                            Text("نسخ", color = AccentText, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        Spacer(modifier = Modifier.width(Space.xs))
-
                         Button(
-                            onClick = { launchTermuxEngine(context, singleFile = item.fullPath) },
+                            onClick = { runSingleFile(context, item.fullPath) },
                             modifier = Modifier.height(Space.touch),
                             shape = RoundedCornerShape(12.dp),
                             contentPadding = PaddingValues(horizontal = Space.md),
@@ -778,164 +639,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-
-    @Composable
-    fun TermuxSetupDialog(onDismiss: () -> Unit) {
-        val context = LocalContext.current
-        // same idempotent commands as the wizard — one source of truth
-        val foldersKey = folders.joinToString { it.rawPath }
-        val steps = remember(foldersKey) { buildWizardSteps(folders.map { it.rawPath }) }
-
-        AlertDialog(
-            onDismissRequest = onDismiss,
-            containerColor = DarkSurface,
-            shape = RoundedCornerShape(20.dp),
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Settings, contentDescription = null, tint = Gold500, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("دليل إعداد تيرمكس", color = Gold500, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                }
-            },
-            text = {
-                LazyColumn {
-                    item {
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = WarnAmber.copy(alpha = 0.1f)),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Info, contentDescription = null, tint = WarnAmber, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("مهم", fontWeight = FontWeight.Bold, color = TextPrimary)
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text("لا تقم بتثبيت تيرمكس من متجر بلاي. قم بتثبيته من F-Droid.", color = TextSecondary, fontSize = 13.sp)
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Button(
-                                    onClick = {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://f-droid.org/packages/com.termux/"))
-                                        context.startActivity(intent)
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = InfoCyan)
-                                ) {
-                                    Text("تحميل تيرمكس من F-Droid", color = DarkBg, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-
-                    steps.forEach { step ->
-                        if (step.opensPicker) {
-                            item {
-                                Button(
-                                    onClick = {
-                                        folderPickerLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE))
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Accent)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Movie,
-                                        contentDescription = null,
-                                        tint = DarkBg,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(Space.sm))
-                                    Text("اختيار مجلد أفلام / مسلسلات", color = DarkBg, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        } else if (step.actions.isNotEmpty()) {
-                            // step 3 is three functions in the wizard — name them here
-                            item {
-                                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-                                    Text(step.title, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    step.actions.forEach { action ->
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(action.icon, contentDescription = null, tint = action.accent, modifier = Modifier.size(15.dp))
-                                            Spacer(modifier = Modifier.width(8.dp))
-                                            Text(action.title, color = TextSecondary, fontSize = 13.sp)
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Text("افتح «الإعداد خطوة بخطوة» لتشغيل أي زر منها.", color = TextMuted, fontSize = 12.sp)
-                                }
-                            }
-                        } else if (step.command.isNotEmpty()) {
-                            item { SetupStep(step.title, step.command, context) }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Gold500)
-                ) {
-                    Text("إغلاق", color = DarkBg, fontWeight = FontWeight.Bold)
-                }
-            }
-        )
-    }
-
-    @Composable
-    fun SetupStep(title: String, command: String, context: Context) {
-        Column(modifier = Modifier.padding(vertical = 8.dp).fillMaxWidth()) {
-            Text(title, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            Spacer(modifier = Modifier.height(6.dp))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DarkBg, RoundedCornerShape(10.dp))
-                    .border(1.dp, DarkBorder, RoundedCornerShape(10.dp))
-                    .clickable {
-                        copyToClipboard(context, command)
-                        Toast.makeText(context, "تم نسخ الأمر!", Toast.LENGTH_SHORT).show()
-                    }
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    command,
-                    color = SuccessGreen,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.width(Space.sm))
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = Accent.copy(alpha = 0.16f),
-                    modifier = Modifier
-                        .clickable {
-                            copyToClipboard(context, command)
-                            Toast.makeText(context, "تم نسخ الأمر", Toast.LENGTH_SHORT).show()
-                        }
-                ) {
-                    Text(
-                        "نسخ",
-                        color = AccentText,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = Space.md, vertical = Space.sm)
-                    )
                 }
             }
         }

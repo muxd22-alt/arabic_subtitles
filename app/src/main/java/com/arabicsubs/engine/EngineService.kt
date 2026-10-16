@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit
 
 sealed interface EngineMode {
     data class Run(val mediaPaths: List<String>, val slots: Int, val threads: Int) : EngineMode
+    data class Process(val file: String, val slots: Int, val threads: Int) : EngineMode
     data class Setup(val mediaPath: String) : EngineMode
 }
 
@@ -32,6 +33,11 @@ object EngineLaunch {
             is EngineMode.Run -> Launch(
                 binary = "$nativeDir/libnode.so",
                 argv = EngineCommand.run(nodeScript, mode.mediaPaths),
+                env = EngineEnv.forRun(home, nativeDir, mode.slots, mode.threads)
+            )
+            is EngineMode.Process -> Launch(
+                binary = "$nativeDir/libnode.so",
+                argv = EngineCommand.process(nodeScript, mode.file),
                 env = EngineEnv.forRun(home, nativeDir, mode.slots, mode.threads)
             )
             is EngineMode.Setup -> Launch(
@@ -132,6 +138,13 @@ class EngineService : Service() {
                 slots = intent.getIntExtra(EXTRA_SLOTS, 1),
                 threads = intent.getIntExtra(EXTRA_THREADS, 1)
             )
+            MODE_PROCESS -> intent.getStringExtra(EXTRA_FILE)?.let {
+                EngineMode.Process(
+                    file = it,
+                    slots = intent.getIntExtra(EXTRA_SLOTS, 1),
+                    threads = intent.getIntExtra(EXTRA_THREADS, 1)
+                )
+            }
             MODE_SETUP -> intent.getStringExtra(EXTRA_MEDIA_PATH)?.let { EngineMode.Setup(it) }
             else -> null
         }
@@ -139,6 +152,7 @@ class EngineService : Service() {
 
     private fun homeFor(mode: EngineMode): String = when (mode) {
         is EngineMode.Run -> EnginePaths.homeFor(mode.mediaPaths.firstOrNull() ?: DEFAULT_MEDIA)
+        is EngineMode.Process -> EnginePaths.homeFor(File(mode.file).parent ?: DEFAULT_MEDIA)
         is EngineMode.Setup -> EnginePaths.homeFor(mode.mediaPath)
     }
 
@@ -335,10 +349,12 @@ class EngineService : Service() {
         private const val EXTRA_MODE = "mode"
         private const val EXTRA_MEDIA_PATHS = "media_paths"
         private const val EXTRA_MEDIA_PATH = "media_path"
+        private const val EXTRA_FILE = "file"
         private const val EXTRA_SLOTS = "slots"
         private const val EXTRA_THREADS = "threads"
 
         private const val MODE_RUN = "run"
+        private const val MODE_PROCESS = "process"
         private const val MODE_SETUP = "setup"
 
         private const val CHANNEL_ID = "engine"
@@ -370,12 +386,17 @@ class EngineService : Service() {
                     EXTRA_MODE,
                     when (mode) {
                         is EngineMode.Run -> MODE_RUN
+                        is EngineMode.Process -> MODE_PROCESS
                         is EngineMode.Setup -> MODE_SETUP
                     }
                 )
             when (mode) {
                 is EngineMode.Run -> intent
                     .putStringArrayListExtra(EXTRA_MEDIA_PATHS, ArrayList(mode.mediaPaths))
+                    .putExtra(EXTRA_SLOTS, mode.slots)
+                    .putExtra(EXTRA_THREADS, mode.threads)
+                is EngineMode.Process -> intent
+                    .putExtra(EXTRA_FILE, mode.file)
                     .putExtra(EXTRA_SLOTS, mode.slots)
                     .putExtra(EXTRA_THREADS, mode.threads)
                 is EngineMode.Setup -> intent.putExtra(EXTRA_MEDIA_PATH, mode.mediaPath)
