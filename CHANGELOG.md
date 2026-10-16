@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.3 — the engine runs inside the app (no Termux)
+
+- **Termux is gone.** The app now carries its own Node engine and native tools
+  and runs them itself in a foreground service; there is no companion installer
+  and nothing to paste into a terminal.
+- The app ships the engine as `arm64-v8a` native libraries (`libnode.so`,
+  `libllama-server.so`, `libwhisper-cli.so`, `libffmpeg.so`, `libffprobe.so`)
+  unpacked from the APK on first run — still **nothing is compiled on the phone**.
+- **One movie at a time, parallelism inside it:** `JOB_CONCURRENCY` is pinned to
+  `1`, while the app's 1–4 selector now sizes the in-video translation chunks
+  (`TRANSLATE_CONCURRENCY`) and the llama `-np` slot pool (`LLAMA_PARALLEL`).
+- First run walks you through three steps — allow all-files access, choose your
+  media folder, download the models once into `<media>/ArabicSubs/` — then
+  **تشغيل الكل** works through the queue in the app, with progress and status
+  surfaced from the service.
+- Removed the `com.termux.permission.RUN_COMMAND` permission, the Termux
+  `<queries>` entry, every copy-command control and the loopback status server.
+
 ## 2.2 — clean slate: one commit, one release
 
 - The repository is reset to a **single commit** and every older release/tag was
