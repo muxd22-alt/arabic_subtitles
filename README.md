@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest"><img src="https://img.shields.io/github/v/release/muxd22-alt/arabic_subtitles?color=E5A93C&label=APK" alt="APK" /></a>
-  <img src="https://img.shields.io/badge/Android-8.0%2B-arm64-blue" alt="Android" />
+  <img src="https://img.shields.io/badge/Android-9.0%2B-arm64-blue" alt="Android" />
   <img src="https://img.shields.io/badge/privacy-100%25%20on--device-success" alt="Privacy" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License" /></a>
 </p>
@@ -26,7 +26,7 @@
 
 ### 1️⃣ Install
 
-Download the **APK** from the [latest release](https://github.com/muxd22-alt/arabic_subtitles/releases/latest) and install it — it is sideloaded (`arm64-v8a`, Android 8.0+), there is no Play Store listing.
+Download the **APK** from the [latest release](https://github.com/muxd22-alt/arabic_subtitles/releases/latest) and install it — it is sideloaded (`arm64-v8a`, Android 9.0+), there is no Play Store listing.
 
 The app carries everything it needs. The Node engine and the native tools —
 `llama-server`, `whisper-cli`, `ffmpeg`, `ffprobe` — are packed inside the APK as
