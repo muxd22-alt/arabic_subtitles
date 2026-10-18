@@ -35,5 +35,8 @@ node_modules/
 logs/
 .arabic_subs_tmp/
 
+# Local-only reference material (bazarr-sync checkout — never committed)
+.addstogithignore/
+
 # Subagent-driven-development scratch (plan workspace, ledger, briefs, reviews)
 .superpowers/
