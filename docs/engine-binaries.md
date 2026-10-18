@@ -3,7 +3,7 @@
 The four executables in `app/src/main/jniLibs/arm64-v8a/` are committed to the
 repository (not fetched at build time) and packaged by AGP as `arm64-v8a` native
 libraries. Android executes them straight from `nativeLibraryDir`; they are named
-`lib*.so` only because that is what the APK's `lib/` tree and `EngineEnv.java`
+`lib*.so` only because that is what the APK's `lib/` tree and `EngineEnv.kt`
 expect. The file *is* the standalone executable.
 
 The names are a hard contract with `EngineEnv.base()`
