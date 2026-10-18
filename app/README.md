@@ -12,14 +12,14 @@ The official native Android app for **Arabic Subs (عربي سبس)**. Built wit
 
 The app **is** the runner: it carries its own Node engine and native tools inside the APK and executes them itself — there is no Termux and no clipboard step.
 
-1. **All-files access:** the engine needs real filesystem paths to read videos and write `.srt` files beside them, so the app requests `MANAGE_EXTERNAL_STORAGE` (sideloaded app, primary storage).
+1. **All-files access:** the engine needs real filesystem paths to read videos and write `.ass` files beside them, so the app requests `MANAGE_EXTERNAL_STORAGE` (sideloaded app, primary storage).
 2. **Three-step first run:** allow access → choose media folder(s) → download the models once into `<media>/ArabicSubs/`.
 3. **The engine runs in-app:** an `android.app.Service` (`EngineService`) unpacks the bundled tools, sets up the environment, spawns the Node engine and streams its output.
 4. **Live status:** the dashboard observes `EngineService.status` (a `StateFlow`) for the active stage and progress — no loopback server.
 5. **Queue-style & single-file runs:**
    - **تشغيل الكل (Run All):** runs the whole pending queue, one film at a time.
    - **▶ ترجمة (Translate):** run just one file.
-   - **تنظيف وفحص (Reclean & Rescan):** clears skipped statuses, re-verifies the `.ArabicSubs.ar.srt` sidecars on disk, and syncs the queue.
+   - **تنظيف وفحص (Reclean & Rescan):** clears skipped statuses, re-verifies the `.ArabicSubs.ar.ass` sidecars on disk, and syncs the queue (legacy `.ArabicSubs.ar.srt` outputs from before 2.4 are still recognised as done).
    - **Skip / Unskip:** skip a video so batch runs bypass it.
 
 ---
@@ -53,7 +53,7 @@ The app **is** the runner: it carries its own Node engine and native tools insid
 
 ```text
 app/
-├── build.gradle.kts           # SDK 35, Min SDK 26, Compose BOM, arm64-v8a ABI filter
+├── build.gradle.kts           # SDK 35, Min SDK 28, Compose BOM, arm64-v8a ABI filter
 ├── src/main/
 │   ├── AndroidManifest.xml    # Permissions (storage, foreground service), the engine service
 │   ├── java/com/arabicsubs/

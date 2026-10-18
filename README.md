@@ -1,8 +1,13 @@
 # Arabic Subs (عربي سبس) 🎬
 
 <p align="center">
+  <img src="docs/ArabicSubs.png" alt="عربي سبس" width="120">
+</p>
+
+<p align="center">
   <strong>Point it at your movies. It writes the Arabic subtitles.</strong><br>
-  Fully offline EN→AR subtitles on Android — no cloud, no account, no tracking, no Termux.
+  Fully offline EN→AR subtitles on Android — the engine runs <em>inside the app</em>.
+  No cloud, no account, no tracking, no Termux.
 </p>
 
 <p align="center">
@@ -14,85 +19,93 @@
 
 ---
 
-## Three steps. That's the whole thing.
+## The whole thing, on your phone
+
+Arabic Subs is a self-contained Android app. The whole engine — a Node runtime,
+`llama-server` (Hy-MT2 translation), `whisper.cpp` (speech), and `ffmpeg`/
+`ffprobe` — is bundled **inside the APK** as `arm64-v8a` native libraries and
+unpacked on first run. It runs as a child process of the app, in a foreground
+service. **There is no Termux, no server, no cloud, and nothing to compile on
+your phone.**
+
+## How to use
 
 | | Step | What you do |
 | :--: | :--- | :--- |
-| **1** | **Install** | Install the app from the [latest APK](https://github.com/muxd22-alt/arabic_subtitles/releases/latest) and allow access to your files. |
-| **2** | **Pick your folders** | Choose your Movies / TV folder in the app. It finds every video and checks what's already there. |
-| **3** | **Run** | Tap **تشغيل الكل** and it works through the queue, one film at a time — or tap **▶ ترجمة** on one film and do just that. |
+| **1** | **Install** | Install the [latest APK](https://github.com/muxd22-alt/arabic_subtitles/releases/latest). It is sideloaded — there is no Play Store listing. |
+| **2** | **Grant & pick** | Allow **all-files access**, then tap **«إضافة مجلد أفلام / مسلسلات»** and pick your Movies / TV folder (e.g. `/sdcard/Movies`). |
+| **3** | **Download the models** | Tap **نزّل النموذج**. This also installs/repairs the bundled engine, then downloads the translation + speech models **once** into `<your folder>/ArabicSubs/models/` (~1.2 GB, resumable). |
+| **4** | **Run** | Tap **تشغيل الكل** to work through the whole queue, or **▶ ترجمة** on one row to translate a single file. |
 
----
-
-### 1️⃣ Install
-
-Download the **APK** from the [latest release](https://github.com/muxd22-alt/arabic_subtitles/releases/latest) and install it — it is sideloaded (`arm64-v8a`, Android 9.0+), there is no Play Store listing.
-
-The app carries everything it needs. The Node engine and the native tools —
-`llama-server`, `whisper-cli`, `ffmpeg`, `ffprobe` — are packed inside the APK as
-`arm64-v8a` native libraries and unpacked on first run. **Nothing is compiled on
-your phone**, and there is no Termux step.
-
-On first run the app asks for **all-files access** (so the engine can read your
-videos and write the `.srt` files beside them), then downloads the models
-(~1.1 GB) **once**, into `<your media folder>/ArabicSubs/`. Delete that folder to
-free the space; the app re-downloads it on the next run.
+The first launch walks you through steps 1–3 with a short wizard. On later runs
+you only touch the dashboard. A **تنظيف وفحص** button clears skipped items and
+re-checks the sidecars already on disk.
 
 <details>
 <summary>What if something goes wrong</summary>
 
 - **`killed by signal SIGSEGV`** → the engine crashed. Reopen the app so it
-  re-unpacks the bundled engine. Details: `<media>/ArabicSubs/models/llama-server.log`.
+  re-unpacks the bundled engine. Details:
+  `<media>/ArabicSubs/models/llama-server.log`.
 - **`tensor 'blk.0.attn_k_norm.weight' has offset …, expected …`** → the model and
   the engine disagree on the quant format. Delete `<media>/ArabicSubs/models/` and
   run again so both are fetched as a matched pair.
 - **Nothing happens when you tap run** → make sure all-files access is granted and
-  at least one media folder is chosen (the setup wizard walks through both).
+  at least one media folder is chosen (the wizard walks through both).
 
 </details>
 
-### 2️⃣ Pick your folders
+## What it produces
 
-Tap **« إضافة مجلد أفلام / مسلسلات »** to pick your media folder (e.g.
-`/sdcard/Movies`). Add as many as you like; the first one hosts the shared
-`ArabicSubs/` models folder.
+For every video it writes a single sidecar next to the video:
 
-The app scans and sorts your library for you, marking each video:
-
-| State | Meaning |
-| :--- | :--- |
-| ✅ جاهز | Arabic subtitle already written |
-| ⏳ بانتظار الترجمة | waiting in the queue |
-| ⏭️ متخطى | you skipped it |
-
-### 3️⃣ Run
-
-- **The whole queue:** tap **تشغيل الكل** — it translates everything pending, one film at a time, until it finishes.
-- **Just one film:** tap **▶ ترجمة** on that row.
-
-Either way it runs **inside the app**, in a foreground service, with live
-progress — no Termux, no terminal.
-
----
-
-## Advanced: the command-line engine
-
-The same engine also runs as a Node CLI (on a desktop, or anywhere Node is
-installed) — handy for scripting or debugging:
-
-```bash
-node bin/arabic-subs.js run --media /path/to/Movies              # the queue
-node bin/arabic-subs.js process "/path/to/Movies/Gladiator.mkv"  # one film
-node bin/arabic-subs.js translate movie.srt --out movie.ar.srt   # one subtitle file
-node bin/arabic-subs.js scan /path/to/Movies                     # what will happen
-node bin/arabic-subs.js status                                   # live status
+```text
+Movie.ArabicSubs.ar.ass
 ```
 
----
+- **ASS/SSA v4.00+**, not SRT. The style is `Default`, and the typeface is
+  **`Thmanyah Sans`** (`src/ass.js`).
+- The first cue is always the watermark: `[ ترجمة الأداة عربي سبس ]`
+  (shown from 1s to 4s).
+- Because the subtitle asks for **Thmanyah Sans**, your **video player must have
+  that font installed** for the Arabic to render as intended. The font files are
+  in this repo under [`docs/fonts/`](docs/fonts/) (regular and bold OTFs) —
+  install the OTF on the device that plays the video (e.g. via your player's
+  font/MX Player font setting).
+- Existing `.ArabicSubs.ar.srt` files from before 2.4 are still recognised as
+  "done", so upgrading never re-translates a library you already have.
+
+## Features
+
+| Feature | What it does |
+| :--- | :--- |
+| **On-device translation** | Tencent **Hy-MT2-1.8B** (Q4_K_M GGUF, ~1.06 GB) served by `llama-server`. |
+| **Speech transcription** | `whisper.cpp` (`base`) for videos with no subtitle track. |
+| **Smart source picking** | Existing subtitle → use it; English subtitle → translate; embedded track → extract then translate; otherwise transcribe the audio. |
+| **Queue or single file** | **تشغيل الكل** runs the library one film at a time; **▶ ترجمة** does just one. |
+| **Skip / unskip + reclean** | Exclude a video, then **تنظيف وفحص** to reset and re-scan. |
+| **Live status** | The dashboard observes the foreground service for the active stage and progress. |
+| **100% offline after setup** | The only network use is the one-time model download. |
+
+## Command-line engine
+
+The same engine also runs as a Node CLI — on a desktop, a NAS, or anywhere
+Node 18+ is installed. This is separate from the APK and still fully supported:
+
+```bash
+node bin/arabic-subs.js setup                              # download the models
+node bin/arabic-subs.js run --media /path/to/Movies        # the queue
+node bin/arabic-subs.js process "/path/to/Movies/Gladiator.mkv"  # one film
+node bin/arabic-subs.js translate movie.srt --out movie.ar.ass   # one subtitle file
+node bin/arabic-subs.js transcribe movie.mkv --out movie.srt     # audio → English SRT
+node bin/arabic-subs.js scan /path/to/Movies               # what would happen
+node bin/arabic-subs.js status                             # engine/model status
+```
 
 ## How it decides
 
-For every video, in this order — and it logs every decision to `logs/decisions.jsonl`:
+For every video, in this order — and it logs every decision to
+`logs/decisions.jsonl`:
 
 | # | If… | Then | Model |
 | :--: | :--- | :--- | :--- |
@@ -103,9 +116,8 @@ For every video, in this order — and it logs every decision to `logs/decisions
 | 5 | no subtitles, but there is audio | transcribe with whisper, then translate | loaded |
 | 6 | neither | skip, with the reason logged | — |
 
-Videos go one at a time so the phone stays cool; inside a video, cues are batched and translated in parallel.
-
----
+The app works on one video at a time so the phone stays cool; inside a video,
+cues are batched and translated in parallel.
 
 ## What runs on your phone
 
@@ -115,7 +127,11 @@ Videos go one at a time so the phone stays cool; inside a video, cues are batche
 | **Transcription** | `whisper.cpp` (`base`), only for videos with no subtitle track. |
 | **Engine** | Node + `llama-server` + `whisper-cli` + `ffmpeg`/`ffprobe`, prebuilt for android-arm64 — bundled **inside** the APK |
 
-The engine is **prebuilt, not compiled on the phone**: cross-compiled with the Android NDK, statically linked (needs only `libc`/`libm`/`libdl`), 16 KB-page ready for Android 15+, and baseline NEON so it runs on any arm64 device. It ships inside the APK and is unpacked on first run.
+The engine is **prebuilt, not compiled on the phone**: cross-compiled with the
+Android NDK, statically linked (needs only `libc`/`libm`/`libdl`), 16 KB-page
+ready for Android 15+, and baseline NEON so it runs on any arm64 device. It ships
+inside the APK and is unpacked on first run. See
+[`docs/engine-binaries.md`](docs/engine-binaries.md) for provenance and hashes.
 
 > **Why Q4_K_M and not the tiny 1.25-bit model?**<br>
 > Hy-MT2 also ships extreme-bit GGUFs — 1.25-bit "Sherry" (STQ1_0) and 2-bit
@@ -130,11 +146,9 @@ The engine is **prebuilt, not compiled on the phone**: cross-compiled with the A
 > official repo. The 1.25-bit file is still selectable with
 > `HYMT_MODEL_FLAVOR=stq`, but it needs the fork engine.
 
----
-
 ## Configuration
 
-Set these as environment variables (or in a `.env` file):
+Set these as environment variables (or in a `.env` file) for the CLI engine:
 
 | Variable | Default | Meaning |
 | :--- | :--- | :--- |
@@ -146,18 +160,38 @@ Set these as environment variables (or in a `.env` file):
 | `WHISPER_MODEL` | `base` | `tiny` / `base` / `small` |
 | `LLAMA_SERVER_BIN` | auto | use your own `llama-server` |
 
----
+## Requirements
 
-## Development
+- **Android 9 (API 28) or newer**, **arm64-v8a** device for the APK.
+- **Node 18+** for the command-line engine.
+- ~1.2 GB free space for the models (in `<media>/ArabicSubs/models/` for the app,
+  or `~/.arabic-subs/models/` for the CLI). Delete the folder to reclaim it; it
+  re-downloads next run.
+
+## Build from source
+
+**Android app** — needs JDK 17 and the Android SDK (API 35, Build Tools 35.0.0):
 
 ```bash
-npm test        # 80 tests, fully offline
+./gradlew assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease   # app/build/outputs/apk/release/app-release.apk
 ```
 
-Layout: `bin/arabic-subs.js` (CLI), `src/` (engine, media, pipeline), `app/` (Android app + bundled engine).
+The `syncNodeSources` Gradle task copies `bin/` + `src/` + `package.json` into
+`app/src/main/assets/node/` before every build, so the app always carries the
+current engine sources.
 
----
+**Engine / CLI** — needs Node 18+:
+
+```bash
+npm test                    # 87 tests, fully offline
+node scripts/verify-engine-libs.mjs   # check the bundled arm64 libraries
+```
+
+Layout: `bin/arabic-subs.js` (CLI), `src/` (engine, media, pipeline),
+`app/` (Android app + bundled engine).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). The bundled third-party tools keep their own
+licenses; see [`docs/engine-binaries.md`](docs/engine-binaries.md).
