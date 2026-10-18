@@ -133,7 +133,7 @@ class MainActivity : ComponentActivity() {
                                         color = Gold500.copy(alpha = 0.15f),
                                     ) {
                                         Text(
-                                            "v2.5",
+                                            "v2.5.1",
                                             color = AccentText,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,

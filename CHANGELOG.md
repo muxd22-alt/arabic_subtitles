@@ -1,5 +1,35 @@
 # Changelog
 
+## 2.5.1 — engine libraries stop shadowing Android's own
+
+- **Fixed a hard crash before any work started**: `CANNOT LINK EXECUTABLE
+  libffmpeg.so: cannot locate symbol "EVP_MD_CTX_init" referenced by
+  /system/lib64/libsqlite.so`. The bundle ships `libcrypto.so`/`libssl.so`
+  (OpenSSL 3.x, needed by `libnode.so`) and the app runs the engine with
+  `LD_LIBRARY_PATH=<nativeLibraryDir>`, so that directory was inherited by every
+  child. ffmpeg's `DT_NEEDED libmediandk.so`/`libcamera2ndk.so` drag in the
+  Android media stack, which loads the *system* `libsqlite.so` — and its
+  `libcrypto.so` then resolved to our OpenSSL 3.x instead of the system
+  BoringSSL, which no longer has `EVP_MD_CTX_init`. Tool binaries are now
+  launched with the bundle directory stripped from the search path
+  (`toolEnv` in `src/binaries.js`); `libnode.so`, which genuinely needs its
+  siblings, still gets it. `scripts/verify-engine-libs.mjs` now fails the build
+  if a tool binary ever grows a non-system dependency, and prints the shadowing
+  sonames it knowingly ships.
+- **Fixed transcription dying on files ffprobe cannot measure.** Probing now asks
+  ffprobe for both format and per-stream durations, then falls back to ffmpeg's
+  own `Duration:` summary, and if the duration is still unknown it extracts the
+  whole track in one pass instead of failing with `could not probe duration ...
+  (is ffprobe installed?)` — the misleading message that MKVs whose trailing
+  metadata is unreadable used to produce. Media files are checked for existence
+  and readability up front, and the failing binary plus its stderr are reported
+  in the engine log.
+- **سجل المحرك gained a copy button**: it copies the error lines (or the whole
+  log when there are none) to the clipboard so a failure can be pasted straight
+  into a bug report.
+- Version is **2.5.1** across `package.json` (release tag `v2.5.1`),
+  `versionCode 17` / `versionName "2.5.1"`, the app badge and the landing page.
+
 ## 2.5 — one parallelism knob, settings behind the gear, in-app engine log
 
 - **Settings behind the gear icon.** Everything that is configuration rather than

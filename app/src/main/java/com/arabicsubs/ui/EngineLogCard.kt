@@ -1,11 +1,13 @@
 package com.arabicsubs.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Terminal
@@ -14,6 +16,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,6 +37,8 @@ fun EngineLogCard(status: EngineStatus, modifier: Modifier = Modifier) {
     val log = status.log
     val errors = log.count { EngineLog.isError(it) }
     val scroll = rememberScrollState()
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
 
     // Follow the tail while it grows, but only when the window is open.
     LaunchedEffect(log.size, expanded) {
@@ -76,6 +83,30 @@ fun EngineLogCard(status: EngineStatus, modifier: Modifier = Modifier) {
                 }
 
                 Text("${log.size} سطر", color = TextMuted, fontSize = 11.sp)
+
+                if (log.isNotEmpty()) {
+                    val errorLines = log.filter { EngineLog.isError(it) }
+                    IconButton(onClick = {
+                        // Prefer just the errors: they are what gets reported back
+                        // to whoever is fixing the engine.
+                        clipboard.setText(
+                            AnnotatedString(
+                                (if (errorLines.isNotEmpty()) errorLines else log).joinToString("\n")
+                            )
+                        )
+                        Toast.makeText(
+                            context,
+                            if (errorLines.isNotEmpty()) "تم نسخ ${errorLines.size} سطر خطأ" else "تم نسخ السجل",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }) {
+                        Icon(
+                            Icons.Default.ContentCopy,
+                            contentDescription = if (errors > 0) "نسخ الأخطاء" else "نسخ السجل",
+                            tint = if (errors > 0) ErrorRose else TextSecondary
+                        )
+                    }
+                }
 
                 IconButton(onClick = { expanded = !expanded }) {
                     Icon(
