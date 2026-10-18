@@ -48,11 +48,13 @@ download, and **توازي الترجمة**. The dashboard keeps the run control
 library, and a collapsible **engine log (سجل المحرك)** that shows progress and
 every error without leaving the app.
 
-**توازي الترجمة** is one number for the whole run — how many audio chunks
-whisper transcribes at once, how many translation requests llama serves at once,
-and how many llama slots back them. It goes from **1 to your device's core
-count (max 8)**: higher means a faster run and a hotter phone. Pick **1** to keep
-the phone cool.
+**توازي الترجمة** is one number for the whole run — how many translation requests
+llama serves at once, how many llama slots back them, and how many audio chunks
+whisper transcribes at once. It goes from **1 to your device's core count (max
+8)**: higher means a faster run and a hotter phone. Pick **1** to keep the phone
+cool. Speech transcription caps itself at half the cores with at least two
+threads per chunk — more concurrent whisper processes reload the model each time
+and make every chunk *slower*, not the file faster.
 
 <details>
 <summary>What if something goes wrong</summary>
@@ -171,6 +173,7 @@ Set these as environment variables (or in a `.env` file) for the CLI engine:
 | `TRANSLATE_CONCURRENCY` | `4` | parallel cue workers |
 | `TRANSLATE_BATCH_LINES` | `16` | cues per request |
 | `WHISPER_MODEL` | `base` | `tiny` / `base` / `small` |
+| `WHISPER_BEAM_SIZE` | `1` | `1` is greedy decoding (fast); `5` is beam search |
 | `LLAMA_SERVER_BIN` | auto | use your own `llama-server` |
 
 ## Requirements

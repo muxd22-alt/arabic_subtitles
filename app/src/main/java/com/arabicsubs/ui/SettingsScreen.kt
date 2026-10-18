@@ -99,7 +99,7 @@ fun SettingsScreen(
             SettingsSection(
                 number = 4,
                 title = "توازي الترجمة",
-                hint = "رقم واحد يضبط كل شيء: كم مقطعاً يُنسخ صوتياً في الوقت نفسه، وكم جملة تُترجم في الوقت نفسه، وكم فتحة llama تخدمها. اختر ١ لأقل استهلاك، أو ارفعه حتى $maxParallelism (عدد أنوية جهازك) لسرعة أكبر وحرارة أعلى."
+                hint = "رقم واحد يضبط كل شيء: كم مقطعاً يُنسخ صوتياً في الوقت نفسه، وكم جملة تُترجم في الوقت نفسه، وكم فتحة llama تخدمها. اختر ١ لأقل استهلاك، أو ارفعه حتى $maxParallelism (عدد أنوية جهازك) لسرعة أكبر وحرارة أعلى. النسخ الصوتي يتوقف عند نصف عدد الأنوية ويمنح كل مقطع خيطين على الأقل، لأن تشغيل نسخ أكثر من ذلك يجعل كل مقطع أبطأ لا أسرع."
             ) {
                 ParallelismSelector(parallelism, maxParallelism, onChooseSlots)
             }
@@ -202,7 +202,10 @@ private fun LibrarySection(
  * Translation parallelism: how many chunks are transcribed at once, how many are
  * translated at once, and how many llama slots back them — all in one choice.
  * The ceiling is the device's core count, so the phone is never asked to do more
- * at once than it has cores for.
+ * at once than it has cores for. Transcription caps itself lower than that
+ * (half the cores, at least two threads per chunk): whisper.cpp is memory
+ * bandwidth bound and loads the whole model per process, so more concurrent
+ * transcriptions make every chunk slower, not the file faster.
  */
 @Composable
 fun ParallelismSelector(parallelism: Int, maxParallelism: Int, onSelect: (Int) -> Unit) {

@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.5.2 — transcription finishes, and says how far it got
+
+- **Fixed transcription timing out on every chunk.** `libwhisper-cli.so timed out
+  after 1200000ms` was the parallelism knob taken literally: with the knob at the
+  core count, 8 concurrent whisper processes were given one thread each, and a
+  single 5-minute chunk then did not finish in 20 minutes. Transcription now caps
+  itself at **half the cores** (at most 4) and keeps **at least two threads per
+  chunk**, because whisper.cpp is memory-bandwidth bound and reloads the whole
+  model per process — more concurrent chunks make each one slower, not the file
+  faster. Translation/llama parallelism still follow the knob exactly.
+- **Greedy decoding by default.** whisper.cpp decodes with beam search 5 unless
+  told otherwise, roughly 5x the compute of greedy decoding for a small accuracy
+  gain on clean audio. `-bs 1 -bo 1` is now passed (`WHISPER_BEAM_SIZE` opts back
+  into beam search).
+- **Visible whisper progress.** `whisper-cli`'s `progress = 42%` output is parsed
+  and printed as `[ASR] whisper chunk 3/24 50%` (quarter-step heartbeats), and the
+  engine announces its budget (`[ASR] whisper budget: 4 chunk(s) at a time, 2
+  threads each`) — so a slow run is visibly slow rather than silently stuck.
+- **Timeouts now explain themselves.** A killed child reports the last lines it
+  produced, e.g. `timed out after 1200000ms (last output: ... progress = 12%)`,
+  and captured output is capped at 64 KB per stream so a two-hour file cannot
+  balloon the engine's memory.
+- Version is **2.5.2** across `package.json` (release tag `v2.5.2`),
+  `versionCode 18` / `versionName "2.5.2"`, the app badge and the landing page.
+
 ## 2.5.1 — engine libraries stop shadowing Android's own
 
 - **Fixed a hard crash before any work started**: `CANNOT LINK EXECUTABLE

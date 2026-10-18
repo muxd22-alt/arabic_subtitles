@@ -1,6 +1,6 @@
 {
   "name": "arabic-subs",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "description": "Arabic Subs - offline on-device EN to AR subtitle engine powered by Hy-MT2 (llama.cpp), ffmpeg and whisper.cpp",
   "main": "src/pipeline.js",
   "bin": {

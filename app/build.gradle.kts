@@ -57,8 +57,8 @@ android {
         applicationId = "com.arabicsubs"
         minSdk = 28
         targetSdk = 35
-        versionCode = 17
-        versionName = "2.5.1"
+        versionCode = 18
+        versionName = "2.5.2"
 
         ndk {
             abiFilters += setOf("arm64-v8a")
