@@ -251,12 +251,16 @@ class EngineService : Service() {
         }
     }
 
+    /** Copies [status] with [line] appended to its rolling log. */
+    private fun appendLog(status: EngineStatus, line: String): EngineStatus =
+        status.copy(log = EngineLog.append(status.log, line))
+
     private fun applyEvent(gen: Int, event: EngineEvent) {
         val line = EngineLog.render(event)
         when (event) {
             is EngineEvent.Stage -> {
                 if (updateStatus(gen) {
-                        EngineLog.append(
+                        appendLog(
                             it.copy(
                                 stage = event.stage,
                                 lastLine = event.file,
@@ -273,7 +277,7 @@ class EngineService : Service() {
             }
             is EngineEvent.Asr ->
                 updateStatus(gen) {
-                    EngineLog.append(
+                    appendLog(
                         it.copy(
                             lastLine = "ASR ${event.done}/${event.total}",
                             progressDone = event.done,
@@ -285,7 +289,7 @@ class EngineService : Service() {
                 }
             is EngineEvent.Translate ->
                 updateStatus(gen) {
-                    EngineLog.append(
+                    appendLog(
                         it.copy(
                             lastLine = if (event.total == null) {
                                 "Translate ${event.done}"
@@ -301,7 +305,7 @@ class EngineService : Service() {
                 }
             is EngineEvent.Queue ->
                 updateStatus(gen) {
-                    EngineLog.append(
+                    appendLog(
                         it.copy(
                             lastLine = event.file,
                             progressDone = null,
@@ -312,7 +316,7 @@ class EngineService : Service() {
                     )
                 }
             is EngineEvent.Raw ->
-                updateStatus(gen) { EngineLog.append(it.copy(lastLine = event.line), line) }
+                updateStatus(gen) { appendLog(it.copy(lastLine = event.line), line) }
         }
     }
 
