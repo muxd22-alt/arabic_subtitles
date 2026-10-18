@@ -53,7 +53,14 @@ data class EngineStatus(
     val stage: String? = null,
     val lastLine: String? = null,
     val exitCode: Int? = null,
-    val failedToStart: String? = null
+    val failedToStart: String? = null,
+    // Progress of the current stage, straight from the engine's [ASR] d/t and
+    // [Translate] d/t lines. `total` is null when the engine has not reported one
+    // yet (so the UI shows an indeterminate bar instead of a frozen 0%).
+    val progressDone: Int? = null,
+    val progressTotal: Int? = null,
+    // Wall-clock start of the current stage's progress, used for the ETA estimate.
+    val progressStartedAtMs: Long? = null
 )
 
 class EngineService : Service() {
@@ -244,13 +251,28 @@ class EngineService : Service() {
     private fun applyEvent(gen: Int, event: EngineEvent) {
         when (event) {
             is EngineEvent.Stage -> {
-                if (updateStatus(gen) { it.copy(stage = event.stage, lastLine = event.file) }) {
+                if (updateStatus(gen) {
+                        it.copy(
+                            stage = event.stage,
+                            lastLine = event.file,
+                            progressDone = null,
+                            progressTotal = null,
+                            progressStartedAtMs = null
+                        )
+                    }) {
                     getSystemService(NotificationManager::class.java)
                         ?.notify(NOTIFICATION_ID, buildNotification(event.stage))
                 }
             }
             is EngineEvent.Asr ->
-                updateStatus(gen) { it.copy(lastLine = "ASR ${event.done}/${event.total}") }
+                updateStatus(gen) {
+                    it.copy(
+                        lastLine = "ASR ${event.done}/${event.total}",
+                        progressDone = event.done,
+                        progressTotal = event.total,
+                        progressStartedAtMs = it.progressStartedAtMs ?: System.currentTimeMillis()
+                    )
+                }
             is EngineEvent.Translate ->
                 updateStatus(gen) {
                     it.copy(
@@ -258,11 +280,21 @@ class EngineService : Service() {
                             "Translate ${event.done}"
                         } else {
                             "Translate ${event.done}/${event.total}"
-                        }
+                        },
+                        progressDone = event.done,
+                        progressTotal = event.total,
+                        progressStartedAtMs = it.progressStartedAtMs ?: System.currentTimeMillis()
                     )
                 }
             is EngineEvent.Queue ->
-                updateStatus(gen) { it.copy(lastLine = event.file) }
+                updateStatus(gen) {
+                    it.copy(
+                        lastLine = event.file,
+                        progressDone = null,
+                        progressTotal = null,
+                        progressStartedAtMs = null
+                    )
+                }
             is EngineEvent.Raw ->
                 updateStatus(gen) { it.copy(lastLine = event.line) }
         }
