@@ -39,6 +39,8 @@ import com.arabicsubs.engine.EngineMode
 import com.arabicsubs.engine.EngineService
 import com.arabicsubs.storage.AllFilesAccess
 import com.arabicsubs.ui.theme.*
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -99,6 +101,10 @@ class MainActivity : ComponentActivity() {
         slots = prefs.getInt("slots", 2).coerceIn(1, 4)
         // first launch → straight into the setup walkthrough
         if (!prefs.getBoolean("setup_done", false)) showWizard = true
+        // Restore the folders the user picked in an earlier session: the tree URIs
+        // hold persistable permissions, so this survives restarts and reboots.
+        loadFolders()
+        if (folders.isNotEmpty()) scanFolders()
         setContent {
             ArabicSubsTheme {
                 val context = LocalContext.current
@@ -182,7 +188,65 @@ class MainActivity : ComponentActivity() {
                 rawPath = raw
             )
         )
+        saveFolders()
         scanFolders()
+    }
+
+    private fun removeFolder(folder: MediaFolder) {
+        folders.remove(folder)
+        saveFolders()
+        scanFolders()
+    }
+
+    // ── Persistence ───────────────────────────────────────────────────
+
+    /** Folders, as JSON, so the list survives the app being closed. */
+    private fun saveFolders() {
+        val arr = JSONArray()
+        folders.forEach { folder ->
+            arr.put(
+                JSONObject()
+                    .put("id", folder.id)
+                    .put("name", folder.displayName)
+                    .put("path", folder.rawPath)
+            )
+        }
+        prefs.edit().putString("folders", arr.toString()).apply()
+    }
+
+    private fun loadFolders() {
+        val raw = prefs.getString("folders", null) ?: return
+        try {
+            val arr = JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val id = obj.optString("id")
+                val path = obj.optString("path")
+                if (id.isEmpty() || path.isEmpty()) continue
+                if (folders.any { it.rawPath == path }) continue
+                folders.add(MediaFolder(id, obj.optString("name", path), path))
+            }
+        } catch (e: Exception) {
+            // unreadable store: start clean instead of crashing on launch
+            prefs.edit().remove("folders").apply()
+        }
+    }
+
+    /** Queue skips are a user choice, so they persist across launches too. */
+    private fun saveSkipped() {
+        val arr = JSONArray()
+        itemList.filter { it.isSkipped }.forEach { arr.put(it.fullPath) }
+        prefs.edit().putString("skipped", arr.toString()).apply()
+    }
+
+    private fun loadSkipped(): Set<String> {
+        val raw = prefs.getString("skipped", null) ?: return emptySet()
+        return try {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).mapNotNull { arr.optString(it) }.filter { it.isNotEmpty() }.toSet()
+        } catch (e: Exception) {
+            emptySet()
+        }
     }
 
     // ── Engine launch ─────────────────────────────────────────────────
@@ -223,6 +287,7 @@ class MainActivity : ComponentActivity() {
                 itemList[index] = item.copy(isSkipped = false)
             }
         }
+        saveSkipped()
         scanFolders()
         Toast.makeText(this, "تم تنظيف قائمة الانتظار وإعادة الفحص", Toast.LENGTH_SHORT).show()
     }
@@ -275,8 +340,11 @@ class MainActivity : ComponentActivity() {
             }
 
             withContext(Dispatchers.Main) {
+                val skipped = loadSkipped()
                 itemList.addAll(
-                    newItems.sortedWith(compareBy({ it.isDone }, { it.folderName }, { it.name }))
+                    newItems
+                        .map { if (skipped.contains(it.fullPath)) it.copy(isSkipped = true) else it }
+                        .sortedWith(compareBy({ it.isDone }, { it.folderName }, { it.name }))
                 )
                 recalcCounts()
                 isScanning = false
@@ -475,7 +543,7 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier.weight(1f)
                                 )
                                 IconButton(
-                                    onClick = { folders.remove(folder); scanFolders() }
+                                    onClick = { removeFolder(folder) }
                                 ) {
                                     Icon(Icons.Default.Close, contentDescription = "إزالة ${folder.displayName}", tint = TextSecondary, modifier = Modifier.size(18.dp))
                                 }
@@ -703,6 +771,7 @@ class MainActivity : ComponentActivity() {
                             if (index >= 0) {
                                 itemList[index] = itemList[index].copy(isSkipped = !item.isSkipped)
                                 recalcCounts()
+                                saveSkipped()
                             }
                         }
                     ) {
