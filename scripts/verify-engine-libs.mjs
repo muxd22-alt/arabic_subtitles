@@ -45,6 +45,15 @@ const ANDROID_SYSTEM_LIBS = new Set([
   'libmediandk.so',
 ]);
 
+// The exact names EngineEnv.base() points the engine at. A missing one means the
+// app ships with no engine even though the directory still holds some .so files.
+const REQUIRED = [
+  'libllama-server.so',
+  'libwhisper-cli.so',
+  'libffmpeg.so',
+  'libffprobe.so',
+];
+
 function fail(file, message) {
   console.error(`FAIL ${file}: ${message}`);
   process.exit(1);
@@ -132,7 +141,7 @@ if (!fs.existsSync(LIB_DIR)) {
 
 const files = fs
   .readdirSync(LIB_DIR)
-  .filter((name) => name.startsWith('lib') && name.includes('.so'))
+  .filter((name) => /^lib.+\.so(\.\d+)*$/.test(name))
   .sort();
 
 if (files.length === 0) {
@@ -141,6 +150,12 @@ if (files.length === 0) {
 }
 
 const presentNames = new Set(files);
+
+const missing = REQUIRED.filter((name) => !presentNames.has(name));
+if (missing.length) {
+  console.error(`FAIL: required engine libraries missing from ${LIB_DIR}: ${missing.join(', ')}`);
+  process.exit(1);
+}
 
 const results = [];
 for (const name of files) {
