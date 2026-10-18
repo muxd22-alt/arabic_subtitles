@@ -89,6 +89,20 @@ test('isDone detects an existing output', () => {
     assert.strictEqual(isDone(video), true);
 });
 
+test('isDone recognises pre-2.4 SRT outputs and does not re-consume them', () => {
+    const config = require('../src/config.js');
+    const dir = tmpDir();
+    const video = path.join(dir, 'v.mkv');
+    const legacy = path.join(dir, `v${config.LEGACY_OUTPUT_SUFFIX}`);
+    fs.writeFileSync(video, '');
+    fs.writeFileSync(legacy, '1\n00:00:01,000 --> 00:00:02,000\nمرحبا\n');
+    assert.strictEqual(isDone(video), true);
+    assert.ok(
+        !listSubtitleSiblings(video).includes(legacy),
+        'legacy SRT output must not be treated as a subtitle source'
+    );
+});
+
 test('translateCues preserves timings and count', async () => {
     const cues = validateSRT(EN_SRT).cues;
     const { cues: out, stats } = await translateCues(cues, fakeServer());
