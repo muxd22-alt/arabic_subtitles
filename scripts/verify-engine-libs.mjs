@@ -45,14 +45,42 @@ const ANDROID_SYSTEM_LIBS = new Set([
   'libmediandk.so',
 ]);
 
-// The exact names EngineEnv.base() points the engine at. A missing one means the
-// app ships with no engine even though the directory still holds some .so files.
+// The exact names EngineEnv.base() points the engine at (the four tool binaries
+// plus the Node runtime). A missing one means the app ships with no engine even
+// though the directory still holds some .so files.
 const REQUIRED = [
   'libllama-server.so',
   'libwhisper-cli.so',
   'libffmpeg.so',
   'libffprobe.so',
+  'libnode.so',
 ];
+
+// The four tool binaries we build/pin ourselves: PT_LOAD alignment below 16 KB
+// is a hard failure here.
+const CONTROLLED = new Set([
+  'libllama-server.so',
+  'libwhisper-cli.so',
+  'libffmpeg.so',
+  'libffprobe.so',
+]);
+
+// Node + the Termux runtime libraries pulled in by scripts/fetch-node-libs.mjs.
+// Termux ships them 16 KB aligned today (verified below), but Termux does not
+// promise it, so misalignment here is a loud WARN rather than a hard failure (see
+// docs/engine-binaries.md). Do not silently drop the check.
+const TERMUX_LIBS = new Set([
+  'libnode.so',
+  'libc++_shared.so',
+  'libcares.so',
+  'libsqlite3.so',
+  'libicuuc.so',
+  'libicui18n.so',
+  'libicudata.so',
+  'libcrypto.so',
+  'libssl.so',
+  'libz.so',
+]);
 
 function fail(file, message) {
   console.error(`FAIL ${file}: ${message}`);
@@ -96,11 +124,7 @@ function parseElf(file, buf) {
   }
 
   if (loads.length === 0) fail(file, 'no PT_LOAD segment');
-  for (const l of loads) {
-    if (l.align < MIN_PAGE_ALIGN) {
-      fail(file, `PT_LOAD p_align=0x${l.align.toString(16)} < 0x4000 (not 16 KB aligned)`);
-    }
-  }
+  const minAlign = loads.reduce((min, l) => Math.min(min, l.align), Infinity);
 
   const vaddrToOffset = (va) => {
     for (const l of loads) {
@@ -131,7 +155,7 @@ function parseElf(file, buf) {
     }
   }
 
-  return needed;
+  return { needed, minAlign };
 }
 
 if (!fs.existsSync(LIB_DIR)) {
@@ -158,21 +182,53 @@ if (missing.length) {
 }
 
 const results = [];
+let alignmentWarnings = 0;
 for (const name of files) {
   const full = path.join(LIB_DIR, name);
   const buf = fs.readFileSync(full);
-  const needed = parseElf(name, buf);
+  const { needed, minAlign } = parseElf(name, buf);
   for (const soname of needed) {
     if (presentNames.has(soname)) continue;
     if (ANDROID_SYSTEM_LIBS.has(soname)) continue;
     fail(name, `unresolved DT_NEEDED "${soname}" (not a sibling file, not in the Android allowlist)`);
   }
-  results.push({ name, size: buf.length, needed });
+  if (minAlign < MIN_PAGE_ALIGN) {
+    if (TERMUX_LIBS.has(name) && !CONTROLLED.has(name)) {
+      // Termux does not promise 16 KB alignment; keep the check but do not fail.
+      console.warn(`WARN ${name}: PT_LOAD p_align=0x${minAlign.toString(16)} < 0x4000 (16 KB) — may fail to load on 16 KB-page devices (see docs/engine-binaries.md)`);
+      alignmentWarnings++;
+    } else {
+      fail(name, `PT_LOAD p_align=0x${minAlign.toString(16)} < 0x4000 (not 16 KB aligned)`);
+    }
+  }
+  results.push({ name, size: buf.length, needed, minAlign });
+}
+
+// Every library name the APK must carry: all committed siblings plus any
+// non-system soname in DT_NEEDED (which the checks above proved is a sibling).
+// `--closure` prints this space-separated for the CI APK assertion.
+function apkLibs() {
+  const libs = new Set(files);
+  for (const r of results) {
+    for (const soname of r.needed) {
+      if (!ANDROID_SYSTEM_LIBS.has(soname)) libs.add(soname);
+    }
+  }
+  return [...libs].sort();
+}
+
+if (process.argv.includes('--closure')) {
+  console.log(apkLibs().join(' '));
+  process.exit(0);
 }
 
 console.log('Engine libraries verified (structure only; not executed):');
 for (const r of results) {
   const list = r.needed.length ? r.needed.join(', ') : '(none)';
-  console.log(`  OK ${r.name} (${r.size} bytes) DT_NEEDED: ${list}`);
+  const align = `0x${r.minAlign.toString(16)}`;
+  console.log(`  OK ${r.name} (${r.size} bytes, p_align=${align}) DT_NEEDED: ${list}`);
+}
+if (alignmentWarnings) {
+  console.warn(`\n${alignmentWarnings} Termux library(ies) below 16 KB alignment — packaged anyway (documented caveat).`);
 }
 console.log(`All ${results.length} engine libraries passed.`);
