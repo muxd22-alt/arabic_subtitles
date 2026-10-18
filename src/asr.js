@@ -1,9 +1,23 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const config = require('./config.js');
 const { parseSRT, timeToMs } = require('./srt.js');
 const audio = require('./audio.js');
 const { findWhisper } = require('./binaries.js');
+
+/**
+ * Threads to hand a single whisper process. When several chunks run at once we
+ * divide the budget instead of letting N x THREADS oversubscribe the CPU (which
+ * on a phone means everything crawls and the run looks frozen).
+ */
+function threadsPerChunk(options = {}, concurrency = 1) {
+    const base = options.threads
+        || Number.parseInt(process.env.THREADS || '0', 10)
+        || os.cpus().length
+        || 4;
+    return Math.max(1, Math.floor(base / Math.max(1, concurrency)));
+}
 
 /**
  * Transcribe a single wav chunk with whisper.cpp into SRT cues.
@@ -84,6 +98,7 @@ async function transcribeMedia(mediaPath, options = {}) {
         onProgress: (done, total) => onProgress({ stage: 'extract', done, total })
     });
 
+    const threads = options.threads || threadsPerChunk(options, concurrency);
     const results = new Array(extracted.length).fill(null);
     let cursor = 0;
 
@@ -91,10 +106,19 @@ async function transcribeMedia(mediaPath, options = {}) {
         while (cursor < extracted.length) {
             const i = cursor++;
             const { chunk, path: wavPath } = extracted[i];
-            const cues = await transcribeChunk(wavPath, options);
+            onProgress({
+                stage: 'transcribe',
+                phase: 'start',
+                chunk: i + 1,
+                done: results.filter(Boolean).length,
+                total: extracted.length
+            });
+            const cues = await transcribeChunk(wavPath, { ...options, threads });
             results[i] = mergeChunkCues(chunk, cues, chunks, i === extracted.length - 1);
             onProgress({
                 stage: 'transcribe',
+                phase: 'done',
+                chunk: i + 1,
                 done: results.filter(Boolean).length,
                 total: extracted.length
             });
@@ -119,6 +143,7 @@ async function transcribeMedia(mediaPath, options = {}) {
 
 module.exports = {
     findWhisper,
+    threadsPerChunk,
     transcribeChunk,
     transcribeMedia,
     mergeChunkCues

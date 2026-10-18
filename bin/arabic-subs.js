@@ -531,11 +531,15 @@ async function cmdRun(args) {
                 server,
                 onStage: (s) => console.log(`[Stage] ${path.basename(file)} → ${s.stage}${s.source ? ` (${s.source})` : ''}${s.cueCount ? ` (${s.cueCount} cues)` : ''}`),
                 onProgress: (p) => {
-                    if (p.stage === 'transcribe') {
+                    if (p.stage === 'extract') {
+                        process.stderr.write(`\r[ASR] extract ${p.done}/${p.total}   `);
+                        if (p.done === p.total) process.stderr.write('\n');
+                    } else if (p.stage === 'transcribe') {
                         process.stderr.write(`\r[ASR] ${p.done}/${p.total} chunks   `);
                         if (p.done === p.total) process.stderr.write('\n');
-                    } else if (p.total && p.done === p.total) {
-                        console.log(`[Translate] ${p.done} lines done`);
+                    } else if (p.total) {
+                        process.stderr.write(`\r[Translate] ${p.done}/${p.total} lines   `);
+                        if (p.done === p.total) process.stderr.write('\n');
                     }
                 }
             });
@@ -764,11 +768,19 @@ async function cmdProcess(args) {
                 server,
                 onStage: (s) => console.log(`[Stage] ${path.basename(file)} → ${s.stage}${s.source ? ` (${s.source})` : ''}${s.cueCount ? ` (${s.cueCount} cues)` : ''}`),
                 onProgress: (p) => {
-                    if (p.stage === 'transcribe') {
-                        process.stderr.write(`\r[ASR] ${p.done}/${p.total} chunks   `);
+                    if (p.stage === 'extract') {
+                        process.stderr.write(`\r[ASR] extract ${p.done}/${p.total}   `);
                         if (p.done === p.total) process.stderr.write('\n');
-                    } else if (p.total && p.done === p.total) {
-                        console.log(`[Translate] ${p.done} lines done`);
+                    } else if (p.stage === 'transcribe') {
+                        if (p.phase === 'start') {
+                            console.log(`[ASR] whisper chunk ${p.chunk}/${p.total}`);
+                        } else {
+                            process.stderr.write(`\r[ASR] ${p.done}/${p.total} chunks   `);
+                            if (p.done === p.total) process.stderr.write('\n');
+                        }
+                    } else if (p.total) {
+                        process.stderr.write(`\r[Translate] ${p.done}/${p.total} lines   `);
+                        if (p.done === p.total) process.stderr.write('\n');
                     }
                 }
             });

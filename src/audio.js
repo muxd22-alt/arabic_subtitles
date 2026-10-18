@@ -9,17 +9,22 @@ function run(cmd, args, options = {}) {
         const proc = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
         let out = '';
         let err = '';
+        let timer = null;
+        const settle = (fn, value) => {
+            if (timer) { clearTimeout(timer); timer = null; }
+            fn(value);
+        };
         proc.stdout.on('data', (c) => (out += c));
         proc.stderr.on('data', (c) => (err += c));
-        proc.on('error', reject);
+        proc.on('error', (e) => settle(reject, e));
         proc.on('exit', (code) => {
-            if (code === 0) resolve(out);
-            else reject(new Error(`${cmd} exited ${code}: ${err.slice(-800)}`));
+            if (code === 0) settle(resolve, out);
+            else settle(reject, new Error(`${cmd} exited ${code}: ${err.slice(-800)}`));
         });
         if (options.timeoutMs) {
-            setTimeout(() => {
+            timer = setTimeout(() => {
                 try { proc.kill('SIGKILL'); } catch (e) { }
-                reject(new Error(`${cmd} timed out`));
+                settle(reject, new Error(`${cmd} timed out after ${options.timeoutMs}ms`));
             }, options.timeoutMs);
         }
     });
@@ -62,13 +67,18 @@ function planChunks(durationMs, chunkMs = config.CHUNK_MS, overlapMs = config.CH
 
 /**
  * Extract one 16 kHz mono WAV segment in parallel-safe fashion.
- * -ss is placed after -i for accurate seeks.
+ * -ss is placed BEFORE -i so ffmpeg seeks to the chunk instead of decoding the
+ * whole file from 0:00 for every chunk (that made later chunks take longer and
+ * longer). Input seeking keeps -accurate_seek on, so the WAV still starts at the
+ * exact chunk timestamp and chunk-relative cue times stay correct.
  */
 async function extractChunk(mediaPath, chunk, outPath) {
     await run(findFfmpeg(), [
+        '-nostdin',
+        '-loglevel', 'error',
         '-y',
-        '-i', mediaPath,
         '-ss', (chunk.startMs / 1000).toFixed(3),
+        '-i', mediaPath,
         '-t', ((chunk.endMs - chunk.startMs) / 1000).toFixed(3),
         '-vn',
         '-ac', '1',

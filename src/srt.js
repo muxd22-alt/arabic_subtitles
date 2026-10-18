@@ -204,7 +204,7 @@ function validateSRT(rawText, options = {}) {
 function probeDurationMs(videoPath) {
     try {
         const out = execFileSync(
-            'ffprobe',
+            require('./binaries.js').findFfprobe(),
             ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', videoPath],
             { timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'] }
         ).toString().trim();
