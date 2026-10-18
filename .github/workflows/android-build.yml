@@ -34,6 +34,12 @@ jobs:
     - name: Verify bundled engine libs
       run: node scripts/verify-engine-libs.mjs
 
+    - name: Install engine dependencies
+      run: npm ci
+
+    - name: Run engine tests
+      run: npm test
+
     - name: Build with Gradle
       run: gradle assembleDebug testDebugUnitTest
 

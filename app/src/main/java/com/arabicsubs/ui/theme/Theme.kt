@@ -5,9 +5,12 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.view.WindowCompat
 
 private val ArabicSubsColorScheme = darkColorScheme(
@@ -42,9 +45,13 @@ fun ArabicSubsTheme(content: @Composable () -> Unit) {
         }
     }
 
-    MaterialTheme(
-        colorScheme = ArabicSubsColorScheme,
-        typography = ArabicSubsTypography,
-        content = content,
-    )
+    // The UI is Arabic regardless of the device locale, so force RTL instead of
+    // following the system layout direction (which is LTR on an English device).
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        MaterialTheme(
+            colorScheme = ArabicSubsColorScheme,
+            typography = ArabicSubsTypography,
+            content = content,
+        )
+    }
 }

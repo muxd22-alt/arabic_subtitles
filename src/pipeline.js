@@ -13,6 +13,12 @@ function outputPathFor(videoPath) {
     return path.join(dir, `${base}${config.OUTPUT_SUFFIX}`);
 }
 
+function legacyOutputPathFor(videoPath) {
+    const dir = path.dirname(videoPath);
+    const base = path.basename(videoPath, path.extname(videoPath));
+    return path.join(dir, `${base}${config.LEGACY_OUTPUT_SUFFIX}`);
+}
+
 function listSubtitleSiblings(videoPath) {
     const dir = path.dirname(videoPath);
     const base = path.basename(videoPath, path.extname(videoPath));
@@ -27,8 +33,8 @@ function listSubtitleSiblings(videoPath) {
     for (const entry of entries) {
         const ext = path.extname(entry).toLowerCase();
         if (!SUBTITLE_EXTS.includes(ext)) continue;
-        // never re-consume our own output
-        if (entry.endsWith(config.OUTPUT_SUFFIX)) continue;
+        // never re-consume our own output (current or pre-2.4 SRT output)
+        if (entry.endsWith(config.OUTPUT_SUFFIX) || entry.endsWith(config.LEGACY_OUTPUT_SUFFIX)) continue;
         const stem = entry.slice(0, entry.length - ext.length);
         if (stem.toLowerCase() === lowerBase || stem.toLowerCase().startsWith(`${lowerBase}.`)) {
             matches.push(path.join(dir, entry));
@@ -92,14 +98,14 @@ function findSubtitleSource(videoPath) {
 }
 
 function isDone(videoPath) {
-    return fs.existsSync(outputPathFor(videoPath));
+    return fs.existsSync(outputPathFor(videoPath)) || fs.existsSync(legacyOutputPathFor(videoPath));
 }
 
 function writeOutput(videoPath, cues) {
     const outPath = outputPathFor(videoPath);
-    const { buildSRT } = require('./srt.js');
+    const { buildASS } = require('./ass.js');
     const tmpPath = `${outPath}.tmp`;
-    fs.writeFileSync(tmpPath, buildSRT(cues), 'utf8');
+    fs.writeFileSync(tmpPath, buildASS(cues), 'utf8');
     fs.renameSync(tmpPath, outPath);
     return outPath;
 }

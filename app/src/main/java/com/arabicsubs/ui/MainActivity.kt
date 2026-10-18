@@ -47,7 +47,7 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
 
     private val videoExtensions = listOf("mp4", "mkv", "avi", "m4v", "mov", "webm", "ts", "m2ts")
-    private val outputSuffix = ".ArabicSubs.ar.srt"
+    private val outputSuffixes = listOf(".ArabicSubs.ar.ass", ".ArabicSubs.ar.srt")
 
     data class MediaFolder(val id: String, val displayName: String, val rawPath: String)
 
@@ -266,7 +266,7 @@ class MainActivity : ComponentActivity() {
                             name = base,
                             fileName = fullName,
                             fullPath = itemPath,
-                            isDone = names.contains(base + outputSuffix),
+                            isDone = outputSuffixes.any { names.contains(base + it) },
                             folderName = folder.displayName
                         )
                     )

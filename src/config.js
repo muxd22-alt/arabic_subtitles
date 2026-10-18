@@ -170,7 +170,10 @@ const AUDIO_CONCURRENCY = intEnv('AUDIO_CONCURRENCY', 2);
 
 const VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.m4v', '.mov', '.webm', '.ts', '.m2ts'];
 
-const OUTPUT_SUFFIX = '.ArabicSubs.ar.srt';
+const OUTPUT_SUFFIX = '.ArabicSubs.ar.ass';
+// Outputs written before 2.4 were SRT. They are still recognised as "done" so an
+// upgrade never re-translates an existing library.
+const LEGACY_OUTPUT_SUFFIX = '.ArabicSubs.ar.srt';
 const BRANDED_NAME_MARKER = 'ArabicSubs';
 
 function ensureDirs() {
@@ -226,6 +229,7 @@ module.exports = {
     AUDIO_CONCURRENCY,
     VIDEO_EXTS,
     OUTPUT_SUFFIX,
+    LEGACY_OUTPUT_SUFFIX,
     BRANDED_NAME_MARKER,
     loadDotEnv,
     ensureDirs,
