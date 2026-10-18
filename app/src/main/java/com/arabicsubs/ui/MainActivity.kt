@@ -39,8 +39,11 @@ import com.arabicsubs.engine.EngineMode
 import com.arabicsubs.engine.EngineService
 import com.arabicsubs.storage.AllFilesAccess
 import com.arabicsubs.ui.theme.*
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -98,6 +101,10 @@ class MainActivity : ComponentActivity() {
         slots = prefs.getInt("slots", 2).coerceIn(1, 4)
         // first launch → straight into the setup walkthrough
         if (!prefs.getBoolean("setup_done", false)) showWizard = true
+        // Restore the folders the user picked in an earlier session: the tree URIs
+        // hold persistable permissions, so this survives restarts and reboots.
+        loadFolders()
+        if (folders.isNotEmpty()) scanFolders()
         setContent {
             ArabicSubsTheme {
                 val context = LocalContext.current
@@ -181,7 +188,65 @@ class MainActivity : ComponentActivity() {
                 rawPath = raw
             )
         )
+        saveFolders()
         scanFolders()
+    }
+
+    private fun removeFolder(folder: MediaFolder) {
+        folders.remove(folder)
+        saveFolders()
+        scanFolders()
+    }
+
+    // ── Persistence ───────────────────────────────────────────────────
+
+    /** Folders, as JSON, so the list survives the app being closed. */
+    private fun saveFolders() {
+        val arr = JSONArray()
+        folders.forEach { folder ->
+            arr.put(
+                JSONObject()
+                    .put("id", folder.id)
+                    .put("name", folder.displayName)
+                    .put("path", folder.rawPath)
+            )
+        }
+        prefs.edit().putString("folders", arr.toString()).apply()
+    }
+
+    private fun loadFolders() {
+        val raw = prefs.getString("folders", null) ?: return
+        try {
+            val arr = JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val id = obj.optString("id")
+                val path = obj.optString("path")
+                if (id.isEmpty() || path.isEmpty()) continue
+                if (folders.any { it.rawPath == path }) continue
+                folders.add(MediaFolder(id, obj.optString("name", path), path))
+            }
+        } catch (e: Exception) {
+            // unreadable store: start clean instead of crashing on launch
+            prefs.edit().remove("folders").apply()
+        }
+    }
+
+    /** Queue skips are a user choice, so they persist across launches too. */
+    private fun saveSkipped() {
+        val arr = JSONArray()
+        itemList.filter { it.isSkipped }.forEach { arr.put(it.fullPath) }
+        prefs.edit().putString("skipped", arr.toString()).apply()
+    }
+
+    private fun loadSkipped(): Set<String> {
+        val raw = prefs.getString("skipped", null) ?: return emptySet()
+        return try {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).mapNotNull { arr.optString(it) }.filter { it.isNotEmpty() }.toSet()
+        } catch (e: Exception) {
+            emptySet()
+        }
     }
 
     // ── Engine launch ─────────────────────────────────────────────────
@@ -222,6 +287,7 @@ class MainActivity : ComponentActivity() {
                 itemList[index] = item.copy(isSkipped = false)
             }
         }
+        saveSkipped()
         scanFolders()
         Toast.makeText(this, "تم تنظيف قائمة الانتظار وإعادة الفحص", Toast.LENGTH_SHORT).show()
     }
@@ -274,8 +340,11 @@ class MainActivity : ComponentActivity() {
             }
 
             withContext(Dispatchers.Main) {
+                val skipped = loadSkipped()
                 itemList.addAll(
-                    newItems.sortedWith(compareBy({ it.isDone }, { it.folderName }, { it.name }))
+                    newItems
+                        .map { if (skipped.contains(it.fullPath)) it.copy(isSkipped = true) else it }
+                        .sortedWith(compareBy({ it.isDone }, { it.folderName }, { it.name }))
                 )
                 recalcCounts()
                 isScanning = false
@@ -296,9 +365,131 @@ class MainActivity : ComponentActivity() {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 20.dp, vertical = 16.dp)
         ) {
+            // Pinned: the engine tile must never scroll away, so the progress bar
+            // and the current stage stay visible while everything else scrolls.
+            EngineStatusCard()
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (isScanning) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    CircularProgressIndicator(color = Gold500, strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
+                    Text("جاري فحص المجلدات...", color = TextMuted, modifier = Modifier.padding(top = 14.dp))
+                }
+            } else {
+                // Everything except the pinned tile lives in one scroll container.
+                // The old fixed Column overflowed on shorter screens and squeezed
+                // the movie list into an unreadable strip at the bottom.
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentPadding = PaddingValues(bottom = Space.xl)
+                ) {
+                    item(key = "controls") { DashboardControls() }
+
+                    item(key = "stats") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            StatCard("مكتمل", achievedCount, SuccessGreen, SuccessGreen.copy(alpha = 0.12f), Modifier.weight(1f), icon = Icons.Default.Check)
+                            StatCard("بالانتظار", pendingCount, WarnAmber, WarnAmber.copy(alpha = 0.12f), Modifier.weight(1f), icon = Icons.Default.Refresh)
+                            StatCard("متخطى", skippedCount, InfoCyan, InfoCyan.copy(alpha = 0.12f), Modifier.weight(1f), icon = Icons.Default.Close)
+                        }
+                    }
+
+                    item(key = "actions") {
+                        Column {
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { runAllFolders(context) },
+                                    modifier = Modifier.weight(1.4f).height(50.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = DarkBg, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("تشغيل الكل", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = DarkBg)
+                                }
+
+                                OutlinedButton(
+                                    onClick = { recleanAndRescan() },
+                                    modifier = Modifier.weight(1f).height(50.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("تنظيف وفحص", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Accent)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(Space.md))
+                            HorizontalDivider(color = DarkBorder, thickness = 1.dp)
+                            Spacer(modifier = Modifier.height(Space.md))
+                        }
+                    }
+
+                    if (itemList.isEmpty()) {
+                        item(key = "empty") {
+                            Text(
+                                "اختر مجلد الأفلام أو المسلسلات لبدء الفحص",
+                                color = TextMuted,
+                                fontSize = 15.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = Space.xl)
+                            )
+                        }
+                    } else {
+                        val grouped = itemList.groupBy { it.folderName }
+                        grouped.forEach { (folder, folderItems) ->
+                            item(key = "header-$folder") {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(top = Space.lg, bottom = Space.sm),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.FolderOpen,
+                                        contentDescription = null,
+                                        tint = TextMuted,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(Space.sm))
+                                    Text(folder, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    Surface(shape = RoundedCornerShape(8.dp), color = DarkCardHigh) {
+                                        Text(
+                                            "${folderItems.size} ملف",
+                                            color = TextSecondary,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.padding(horizontal = Space.sm, vertical = Space.xxs)
+                                        )
+                                    }
+                                }
+                            }
+                            // stable keys: without them a scan/reorder makes rows jump
+                            items(folderItems, key = { it.fullPath }) { item -> MediaItemRow(context, item) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun DashboardControls() {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Button(
                 onClick = {
                     val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
@@ -352,7 +543,7 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier.weight(1f)
                                 )
                                 IconButton(
-                                    onClick = { folders.remove(folder); scanFolders() }
+                                    onClick = { removeFolder(folder) }
                                 ) {
                                     Icon(Icons.Default.Close, contentDescription = "إزالة ${folder.displayName}", tint = TextSecondary, modifier = Modifier.size(18.dp))
                                 }
@@ -363,99 +554,7 @@ class MainActivity : ComponentActivity() {
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
-            EngineStatusCard()
-
-            Spacer(modifier = Modifier.height(12.dp))
-
             ParallelismSelector()
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (isScanning) {
-                Spacer(modifier = Modifier.height(32.dp))
-                CircularProgressIndicator(color = Gold500, strokeWidth = 3.dp, modifier = Modifier.size(44.dp))
-                Text("جاري فحص المجلدات...", color = TextMuted, modifier = Modifier.padding(top = 14.dp))
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    StatCard("مكتمل", achievedCount, SuccessGreen, SuccessGreen.copy(alpha = 0.12f), Modifier.weight(1f), icon = Icons.Default.Check)
-                    StatCard("بالانتظار", pendingCount, WarnAmber, WarnAmber.copy(alpha = 0.12f), Modifier.weight(1f), icon = Icons.Default.Refresh)
-                    StatCard("متخطى", skippedCount, InfoCyan, InfoCyan.copy(alpha = 0.12f), Modifier.weight(1f), icon = Icons.Default.Close)
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { runAllFolders(context) },
-                        modifier = Modifier.weight(1.4f).height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = DarkBg, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("تشغيل الكل", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = DarkBg)
-                    }
-
-                    OutlinedButton(
-                        onClick = { recleanAndRescan() },
-                        modifier = Modifier.weight(1f).height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("تنظيف وفحص", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Accent)
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(Space.md))
-                HorizontalDivider(color = DarkBorder, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(Space.md))
-
-                if (itemList.isEmpty()) {
-                    Spacer(modifier = Modifier.height(Space.xl))
-                    Text("اختر مجلد الأفلام أو المسلسلات لبدء الفحص", color = TextMuted, fontSize = 15.sp)
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        val grouped = itemList.groupBy { it.folderName }
-                        grouped.forEach { (folder, folderItems) ->
-                            item(key = "header-$folder") {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(top = Space.lg, bottom = Space.sm),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        Icons.Default.FolderOpen,
-                                        contentDescription = null,
-                                        tint = TextMuted,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(Space.sm))
-                                    Text(folder, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Surface(shape = RoundedCornerShape(8.dp), color = DarkCardHigh) {
-                                        Text(
-                                            "${folderItems.size} ملف",
-                                            color = TextSecondary,
-                                            fontSize = 11.sp,
-                                            modifier = Modifier.padding(horizontal = Space.sm, vertical = Space.xxs)
-                                        )
-                                    }
-                                }
-                            }
-                            // stable keys: without them a scan/reorder makes rows jump
-                            items(folderItems, key = { it.fullPath }) { item -> MediaItemRow(context, item) }
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -471,38 +570,106 @@ class MainActivity : ComponentActivity() {
             else -> "المحرك: متوقف" to TextMuted
         }
 
+        val done = status.progressDone
+        val total = status.progressTotal
+        val fraction: Float? = if (status.running && done != null && total != null && total > 0) {
+            (done.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+        } else {
+            null
+        }
+
+        // A 1s tick re-evaluates the ETA while a stage is running, without
+        // recomposing the media list.
+        var nowMs by remember { mutableStateOf(0L) }
+        LaunchedEffect(status.running, status.progressStartedAtMs) {
+            while (status.running && status.progressStartedAtMs != null) {
+                nowMs = System.currentTimeMillis()
+                delay(1000)
+            }
+        }
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = DarkCard),
             shape = RoundedCornerShape(12.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(modifier = Modifier.size(10.dp).background(accent, CircleShape))
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        label,
-                        fontSize = 12.sp,
-                        color = accent,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    val detail = status.failedToStart ?: status.lastLine
-                    if (!detail.isNullOrEmpty()) {
-                        Spacer(modifier = Modifier.height(2.dp))
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(10.dp).background(accent, CircleShape))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            detail,
-                            fontSize = 11.sp,
-                            color = TextMuted,
+                            label,
+                            fontSize = 12.sp,
+                            color = accent,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
+                        )
+                        val detail = status.failedToStart ?: status.lastLine
+                        if (!detail.isNullOrEmpty()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                detail,
+                                fontSize = 11.sp,
+                                color = TextMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    if (fraction != null) {
+                        Text(
+                            "${(fraction * 100).toInt()}%",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = accent
+                        )
+                    }
+                }
+
+                if (status.running) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    if (fraction != null && done != null && total != null) {
+                        LinearProgressIndicator(
+                            progress = { fraction },
+                            modifier = Modifier.fillMaxWidth().height(6.dp),
+                            color = accent,
+                            trackColor = DarkCardHigh
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Text("$done / $total", fontSize = 11.sp, color = TextMuted)
+                            Spacer(modifier = Modifier.weight(1f))
+                            estimateEta(status.progressStartedAtMs, nowMs, done, total)?.let { eta ->
+                                Text("الوقت المتبقي $eta", fontSize = 11.sp, color = TextMuted)
+                            }
+                        }
+                    } else {
+                        // Stage is active but no total reported yet — indeterminate.
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth().height(6.dp),
+                            color = accent,
+                            trackColor = DarkCardHigh
                         )
                     }
                 }
             }
+        }
+    }
+
+    // Wall-clock ETA from the observed rate so far. Deliberately conservative: it
+    // stays silent until there is at least 2s of data and a real total.
+    private fun estimateEta(startedAtMs: Long?, nowMs: Long, done: Int, total: Int): String? {
+        if (startedAtMs == null || done <= 0 || total <= done) return null
+        val elapsedMs = nowMs - startedAtMs
+        if (elapsedMs < 2000) return null
+        val estimatedTotalMs = elapsedMs.toDouble() * total / done
+        val remainingSec = ((estimatedTotalMs - elapsedMs) / 1000.0).toLong()
+        if (remainingSec <= 0) return null
+        return when {
+            remainingSec < 60 -> "أقل من دقيقة"
+            remainingSec < 3600 -> "≈ ${remainingSec / 60} دقيقة"
+            else -> "≈ ${remainingSec / 3600} ساعة"
         }
     }
 
@@ -604,6 +771,7 @@ class MainActivity : ComponentActivity() {
                             if (index >= 0) {
                                 itemList[index] = itemList[index].copy(isSkipped = !item.isSkipped)
                                 recalcCounts()
+                                saveSkipped()
                             }
                         }
                     ) {
