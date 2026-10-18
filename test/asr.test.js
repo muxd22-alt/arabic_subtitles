@@ -8,6 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 let spawned = [];
+let killed = [];
 let responder = () => ({ code: 0, stdout: '', stderr: '' });
 
 cp.spawn = (cmd, args, opts) => {
@@ -15,7 +16,7 @@ cp.spawn = (cmd, args, opts) => {
     const proc = new EventEmitter();
     proc.stdout = new PassThrough();
     proc.stderr = new PassThrough();
-    proc.kill = () => { };
+    proc.kill = () => { killed.push(cmd); };
     process.nextTick(() => {
         const out = responder(cmd, args) || {};
         if (out.error) {
@@ -24,6 +25,7 @@ cp.spawn = (cmd, args, opts) => {
         }
         if (out.stdout) proc.stdout.write(out.stdout);
         if (out.stderr) proc.stderr.write(out.stderr);
+        if (out.hang) return; // never exits, so the timeout path is exercised
         proc.stdout.end();
         proc.stderr.end();
         proc.emit('exit', out.code === undefined ? 0 : out.code);
@@ -74,6 +76,84 @@ test('threadsPerChunk divides the CPU budget across concurrent chunks and never 
     assert.strictEqual(asr.threadsPerChunk({ threads: 8 }, 8), 1);
     assert.strictEqual(asr.threadsPerChunk({ threads: 1 }, 4), 1);
     assert.strictEqual(asr.threadsPerChunk({ threads: 2 }, 100), 1);
+});
+
+test('planBudget never starves a chunk down to one thread', () => {
+    // "max parallelism" on an 8-core phone used to mean 8 whisper processes with
+    // 1 thread each — each 5-minute chunk then took over 20 minutes and timed out.
+    const budget = asr.planBudget({ cores: 8, concurrency: 8, threads: 8 });
+    assert.strictEqual(budget.concurrency, 4);
+    assert.strictEqual(budget.threads, 2);
+    assert.ok(budget.threads >= 2, 'a chunk always keeps at least two threads');
+});
+
+test('planBudget caps the requested concurrency and honours a smaller request', () => {
+    assert.strictEqual(asr.planBudget({ cores: 4, concurrency: 4, threads: 4 }).concurrency, 2);
+    assert.strictEqual(asr.planBudget({ cores: 2, concurrency: 2, threads: 2 }).concurrency, 1);
+    assert.strictEqual(asr.planBudget({ cores: 12, concurrency: 12, threads: 12 }).concurrency, 4);
+    assert.strictEqual(asr.planBudget({ cores: 8, concurrency: 1, threads: 8 }).concurrency, 1);
+    assert.strictEqual(asr.planBudget({ cores: 8, concurrency: 1, threads: 8 }).threads, 8);
+});
+
+test('whisperDecodeArgs uses greedy decoding by default and beam search on request', () => {
+    assert.deepStrictEqual(asr.whisperDecodeArgs(1), ['-bs', '1', '-bo', '1']);
+    assert.deepStrictEqual(asr.whisperDecodeArgs(undefined), ['-bs', '1', '-bo', '1']);
+    assert.deepStrictEqual(asr.whisperDecodeArgs(0), ['-bs', '1', '-bo', '1']);
+    assert.deepStrictEqual(asr.whisperDecodeArgs(5), ['-bs', '5']);
+});
+
+test('transcribeChunk decodes greedily and forwards whisper progress as percentages', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'asr-chunk-'));
+    const wav = path.join(dir, 'chunk_0000.wav');
+    const percents = [];
+
+    responder = (cmd, args) => {
+        if (args.includes('-osrt')) {
+            fs.writeFileSync(`${args[args.indexOf('-of') + 1]}.srt`, '1\n00:00:01,000 --> 00:00:02,000\nhello\n');
+            return {
+                code: 0,
+                stderr: 'whisper_print_progress_callback: progress =  42%\n' +
+                    'whisper_print_progress_callback: progress =  50%\n' +
+                    'whisper_print_progress_callback: progress = 100%\n'
+            };
+        }
+        return { code: 0 };
+    };
+
+    spawned = [];
+    const cues = await asr.transcribeChunk(wav, {
+        bin: path.join(os.tmpdir(), 'fake-whisper'),
+        modelPath: fakeModel(),
+        threads: 2,
+        onPercent: (p) => percents.push(p)
+    });
+
+    const args = spawned[0].args;
+    assert.deepStrictEqual(args.slice(args.indexOf('-bs'), args.indexOf('-bs') + 2), ['-bs', '1']);
+    assert.ok(args.includes('-bo'), 'greedy decoding also pins best-of');
+    assert.strictEqual(args[args.indexOf('-t') + 1], '2');
+    assert.deepStrictEqual(percents, [42, 100], 'quarter-step heartbeats, not every percent');
+    assert.strictEqual(cues.length, 1);
+    assert.strictEqual(cues[0].text, 'hello');
+});
+
+test('a timed-out child reports where it stopped and gets killed', async () => {
+    spawned = [];
+    killed = [];
+    responder = () => ({
+        hang: true,
+        stderr: 'whisper_print_progress_callback: progress =  12%\n'
+    });
+
+    await assert.rejects(
+        () => audio.run('/lib/libwhisper-cli.so', [], { timeoutMs: 30 }),
+        (err) => {
+            assert.match(err.message, /timed out after 30ms/);
+            assert.match(err.message, /progress =\s+12%/);
+            return true;
+        }
+    );
+    assert.deepStrictEqual(killed, ['/lib/libwhisper-cli.so']);
 });
 
 test('probeDurationDetailed: per-stream duration is used when format duration is empty', async () => {
@@ -136,15 +216,21 @@ test('transcribeMedia falls back to a single whole-file pass when the duration i
     };
 
     spawned = [];
+    const logs = [];
     const cues = await asr.transcribeMedia(media, {
         tmpDir,
         bin: path.join(os.tmpdir(), 'fake-whisper'),
         modelPath: fakeModel(),
         onProgress: () => { },
+        log: (line) => logs.push(line),
         onDuration: (ms) => seen.durations.push(ms)
     });
 
     assert.deepStrictEqual(seen.durations, [null], 'unknown duration is reported back as null');
+    assert.ok(
+        logs.some((line) => line.includes('whisper budget')),
+        'the run announces how many chunks and threads it will use'
+    );
     const extraction = spawned.find((s) => s.args.includes('-nostdin'));
     assert.ok(extraction, 'ffmpeg extraction happened');
     assert.ok(!extraction.args.includes('-ss'), 'whole-file mode does not seek');

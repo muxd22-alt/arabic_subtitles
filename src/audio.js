@@ -4,6 +4,9 @@ const { spawn } = require('child_process');
 const config = require('./config.js');
 const { findFfmpeg, findFfprobe, toolEnv } = require('./binaries.js');
 
+/** How much of a child's stdout/stderr is retained for error reporting. */
+const MAX_CAPTURE = 65536;
+
 /**
  * Run a child process and resolve with its full outcome, including a non-zero
  * exit. Never rejects for a non-zero code (only for a spawn failure such as a
@@ -31,8 +34,24 @@ function runResult(cmd, args, options = {}) {
             if (timer) { clearTimeout(timer); timer = null; }
             fn(value);
         };
-        proc.stdout.on('data', (c) => (stdout += c));
-        proc.stderr.on('data', (c) => (stderr += c));
+        proc.stdout.on('data', (c) => {
+            stdout = (stdout + c).slice(-MAX_CAPTURE);
+        });
+        // Tool output is verbose (ffmpeg prints per-frame stats, whisper prints a
+        // percentage per step), so only the tail is kept: enough to explain a
+        // failure, never enough to grow without bound on a two-hour file.
+        let pending = '';
+        proc.stderr.on('data', (c) => {
+            stderr = (stderr + c).slice(-MAX_CAPTURE);
+            if (!options.onStderrLine) return;
+            pending += c;
+            const lines = pending.split(/[\r\n]/);
+            pending = lines.pop();
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (trimmed) options.onStderrLine(trimmed);
+            }
+        });
         proc.on('error', (e) => settle(reject, e));
         proc.on('exit', (code) => settle(resolve, { code, stdout, stderr, timedOut: false }));
         if (options.timeoutMs) {
@@ -46,12 +65,28 @@ function runResult(cmd, args, options = {}) {
 
 function run(cmd, args, options = {}) {
     return runResult(cmd, args, options).then((r) => {
-        if (r.timedOut) throw new Error(`${cmd} timed out after ${options.timeoutMs}ms`);
+        if (r.timedOut) {
+            // A timeout with no context is a dead end: say where it stopped.
+            const tail = lastLines(r.stderr || r.stdout, 3);
+            throw new Error(
+                `${cmd} timed out after ${options.timeoutMs}ms${tail ? ` (last output: ${tail})` : ''}`
+            );
+        }
         if (r.code !== 0) {
             throw new Error(`${cmd} exited ${r.code}: ${r.stderr.slice(-800) || '(no stderr)'}`);
         }
         return r.stdout;
     });
+}
+
+function lastLines(text, count) {
+    return String(text || '')
+        .split(/[\r\n]/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .slice(-count)
+        .join(' | ')
+        .slice(-400);
 }
 
 /** Largest positive number in some command output (`N/A`, empty and 0 are skipped). */

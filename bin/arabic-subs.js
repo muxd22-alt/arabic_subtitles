@@ -683,6 +683,7 @@ async function cmdTranscribe(args) {
             durationMs,
             onProgress: (p) => {
                 if (p.stage === 'extract') process.stderr.write(`\r[ASR] extract ${p.done}/${p.total}   `);
+                else if (p.stage === 'transcribe' && p.phase === 'progress') console.log(`[ASR] whisper chunk ${p.chunk}/${p.total} ${p.percent}%`);
                 else if (p.stage === 'transcribe') process.stderr.write(`\r[ASR] whisper ${p.done}/${p.total}   `);
             }
         });
@@ -774,6 +775,8 @@ async function cmdProcess(args) {
                     } else if (p.stage === 'transcribe') {
                         if (p.phase === 'start') {
                             console.log(`[ASR] whisper chunk ${p.chunk}/${p.total}`);
+                        } else if (p.phase === 'progress') {
+                            console.log(`[ASR] whisper chunk ${p.chunk}/${p.total} ${p.percent}%`);
                         } else {
                             process.stderr.write(`\r[ASR] ${p.done}/${p.total} chunks   `);
                             if (p.done === p.total) process.stderr.write('\n');

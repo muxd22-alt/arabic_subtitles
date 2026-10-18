@@ -167,6 +167,11 @@ const N_PREDICT = intEnv('TRANSLATE_MAX_TOKENS', 1024);
 const CHUNK_MS = intEnv('AUDIO_CHUNK_MINUTES', 5) * 60 * 1000;
 const CHUNK_OVERLAP_MS = 1000;
 const AUDIO_CONCURRENCY = intEnv('AUDIO_CONCURRENCY', 2);
+// whisper.cpp decodes with beam search 5 by default, which costs roughly 5x the
+// compute of greedy decoding for a small accuracy gain on clean audio. On a phone
+// that is the difference between minutes and tens of minutes, so greedy is the
+// default and beam search is opt-in via WHISPER_BEAM_SIZE.
+const WHISPER_BEAM_SIZE = intEnv('WHISPER_BEAM_SIZE', 1);
 
 const VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.m4v', '.mov', '.webm', '.ts', '.m2ts'];
 
@@ -227,6 +232,7 @@ module.exports = {
     CHUNK_MS,
     CHUNK_OVERLAP_MS,
     AUDIO_CONCURRENCY,
+    WHISPER_BEAM_SIZE,
     VIDEO_EXTS,
     OUTPUT_SUFFIX,
     LEGACY_OUTPUT_SUFFIX,
