@@ -144,7 +144,39 @@ equals upstream); libsqlite3's `DT_NEEDED libz.so.1` was still rewritten.
 Note the app's own `nativeLibraryDir` is first on the dynamic-linker search path,
 so the bundled `libcrypto.so` / `libssl.so` / `libz.so` shadow the identically
 named Android system libraries (Android's `libcrypto`/`libssl` are BoringSSL, a
-different ABI from OpenSSL 3).
+different ABI from OpenSSL 3). **That shadowing is a real failure, not a
+theoretical one** — see below.
+
+### Soname shadowing: why tool processes run without `nativeLibraryDir` on the path
+
+`libnode.so` genuinely needs its siblings, so the app starts the engine with
+`LD_LIBRARY_PATH=<nativeLibraryDir>` (`EngineEnv.base()`). Children inherit it,
+and ffmpeg died on the first real device because of that:
+
+```
+CANNOT LINK EXECUTABLE .../lib/arm64/libffmpeg.so: cannot locate symbol
+"EVP_MD_CTX_init" referenced by /system/lib64/libsqlite.so
+```
+
+The chain: `libffmpeg.so`'s `DT_NEEDED libmediandk.so` / `libcamera2ndk.so` pull
+in the Android media/binder stack, which loads the *system*
+`/system/lib64/libsqlite.so`; bionic then resolved that library's `DT_NEEDED
+"libcrypto.so"` to **our** OpenSSL 3.x (same soname, found first on
+`LD_LIBRARY_PATH`) instead of the system BoringSSL. OpenSSL 3.0 dropped the
+deprecated `EVP_MD_CTX_init` symbol, so the exec aborted before ffmpeg ran.
+
+The fix keeps the naming (renaming our OpenSSL would mean patching `DT_NEEDED`
+inside the 45 MB `libnode.so`) and instead **strips the tool's own directory from
+the search path** for the four tool binaries — `toolEnv()` in
+`src/binaries.js`, used by every tool spawn (`audio.runResult`, `llama.js`,
+`srt.js`). This is sound precisely because the four tools have **no `SONAME` and
+no `RUNPATH`** and their entire `DT_NEEDED` list is Android system libraries, so
+they never need a sibling; `scripts/verify-engine-libs.mjs` now enforces that
+invariant and prints the shadowing sonames it knowingly ships.
+
+The deeper (not yet taken) alternative is a leaner ffmpeg build without
+`--enable-libcamera`/media-NDK support, which would remove `libcamera2ndk.so` /
+`libmediandk.so` — and with them the media stack — from the process entirely.
 
 ### 16 KB alignment caveat
 
@@ -171,5 +203,11 @@ Termux that regresses alignment must be handled there (e.g. by an explicit ELF
   CI is x64 Ubuntu, so the arm64 binaries cannot be run. Actually launching them
   (Node starting the engine from `libnode.so`, llama-server serving a model,
   whisper-cli transcribing, ffmpeg/ffprobe probing) remains an outstanding
-  manual check on a real arm64 Android device. The `libcrypto`/`libssl`/`libz`
-  shadowing of the system libraries in particular can only be confirmed there.
+  manual check on a real arm64 Android device.
+- The `libcrypto`/`libssl`/`libz` shadowing of the system libraries **failed on
+  the first real device** (`EVP_MD_CTX_init` referenced by
+  `/system/lib64/libsqlite.so`) and is fixed as described above: tool processes
+  no longer see `nativeLibraryDir` on `LD_LIBRARY_PATH`. The static side of that
+  fix is CI-enforced (tools must depend on system libraries only), but the
+  runtime side — ffmpeg/ffprobe actually linking and probing — can only be
+  confirmed on a device.

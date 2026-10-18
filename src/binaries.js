@@ -104,10 +104,46 @@ function findFfprobe() {
     ) || 'ffprobe';
 }
 
+/**
+ * Environment for launching one of the bundled *tool* binaries
+ * (ffmpeg / ffprobe / whisper-cli / llama-server) as a child process.
+ *
+ * Those four are self-contained: their entire DT_NEEDED list is Android system
+ * libraries (scripts/verify-engine-libs.mjs enforces that), so they never need a
+ * sibling — yet the app starts the engine with LD_LIBRARY_PATH=<nativeLibraryDir>
+ * because libnode.so *does* need its siblings, and every child inherits it.
+ *
+ * ffmpeg is where that inheritance bites: its DT_NEEDED libmediandk.so /
+ * libcamera2ndk.so drag in the Android media/binder stack, which loads the
+ * *system* /system/lib64/libsqlite.so, and bionic then resolved that library's
+ * DT_NEEDED "libcrypto.so" to our bundled OpenSSL 3.x instead of the system
+ * BoringSSL. OpenSSL 3.0 dropped the deprecated EVP_MD_CTX_init symbol, so the
+ * exec died with:
+ *
+ *   CANNOT LINK EXECUTABLE libffmpeg.so: cannot locate symbol "EVP_MD_CTX_init"
+ *   referenced by /system/lib64/libsqlite.so
+ *
+ * Dropping the tool's own directory from the search path — the only reason it is
+ * on the path at all is Node — makes every system soname resolve to the system
+ * copy. The tool binaries have no SONAME and no RUNPATH, so their own directory
+ * is never searched implicitly: LD_LIBRARY_PATH is the only thing leaking.
+ */
+function toolEnv(bin) {
+    const dir = path.resolve(path.dirname(bin));
+    const env = { ...process.env };
+    const keep = String(env.LD_LIBRARY_PATH || '')
+        .split(path.delimiter)
+        .filter((entry) => entry && path.resolve(entry) !== dir);
+    if (keep.length > 0) env.LD_LIBRARY_PATH = keep.join(path.delimiter);
+    else delete env.LD_LIBRARY_PATH;
+    return env;
+}
+
 module.exports = {
     findExecutable,
     findLlamaServer,
     findWhisper,
     findFfmpeg,
-    findFfprobe
+    findFfprobe,
+    toolEnv
 };

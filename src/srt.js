@@ -203,10 +203,11 @@ function validateSRT(rawText, options = {}) {
 
 function probeDurationMs(videoPath) {
     try {
+        const bin = require('./binaries.js').findFfprobe();
         const out = execFileSync(
-            require('./binaries.js').findFfprobe(),
+            bin,
             ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', videoPath],
-            { timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'] }
+            { timeout: 15000, stdio: ['ignore', 'pipe', 'ignore'], env: require('./binaries.js').toolEnv(bin) }
         ).toString().trim();
         const seconds = Number(out);
         if (!Number.isFinite(seconds) || seconds <= 0) return null;

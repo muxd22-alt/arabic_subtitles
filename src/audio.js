@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const config = require('./config.js');
-const { findFfmpeg, findFfprobe } = require('./binaries.js');
+const { findFfmpeg, findFfprobe, toolEnv } = require('./binaries.js');
 
 /**
  * Run a child process and resolve with its full outcome, including a non-zero
@@ -13,7 +13,10 @@ function runResult(cmd, args, options = {}) {
     return new Promise((resolve, reject) => {
         let proc;
         try {
-            proc = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+            proc = spawn(cmd, args, {
+                stdio: ['ignore', 'pipe', 'pipe'],
+                env: options.env || toolEnv(cmd)
+            });
         } catch (e) {
             reject(e);
             return;
@@ -191,6 +194,7 @@ module.exports = {
     runResult,
     findFfmpeg,
     findFfprobe,
+    toolEnv,
     probeDurationMs,
     probeDurationDetailed,
     planChunks,

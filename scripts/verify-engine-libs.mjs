@@ -56,6 +56,13 @@ const REQUIRED = [
   'libnode.so',
 ];
 
+// Sonames that Android itself ships, which we also bundle our own copy of.
+// Deliberately separate from ANDROID_SYSTEM_LIBS: that set answers "may a tool
+// binary depend on this?", this one answers "does this name exist on the device
+// too?" — i.e. does our copy shadow the platform's. libcrypto.so/libssl.so are
+// OpenSSL 3.x for Node; Android's are BoringSSL, and the two do not agree.
+const ANDROID_SHIPPED_SONAMES = new Set([...ANDROID_SYSTEM_LIBS, 'libcrypto.so', 'libssl.so', 'libsqlite.so']);
+
 // The four tool binaries we build/pin ourselves: PT_LOAD alignment below 16 KB
 // is a hard failure here.
 const CONTROLLED = new Set([
@@ -192,6 +199,21 @@ for (const name of files) {
     if (ANDROID_SYSTEM_LIBS.has(soname)) continue;
     fail(name, `unresolved DT_NEEDED "${soname}" (not a sibling file, not in the Android allowlist)`);
   }
+  if (CONTROLLED.has(name)) {
+    // Tool binaries are executed as child processes WITHOUT the bundle directory
+    // on the library search path (see toolEnv in src/binaries.js), because that
+    // directory ships libcrypto.so/libssl.so/libz.so and would shadow Android's
+    // own copies with incompatible builds. A sibling dependency here would
+    // therefore be unresolvable at runtime, so keep tools on system libraries.
+    for (const soname of needed) {
+      if (!ANDROID_SYSTEM_LIBS.has(soname)) {
+        fail(
+          name,
+          `tool binaries must depend on Android system libraries only, but this one needs "${soname}": tool processes run without the bundle directory on LD_LIBRARY_PATH`
+        );
+      }
+    }
+  }
   if (minAlign < MIN_PAGE_ALIGN) {
     if (TERMUX_LIBS.has(name) && !CONTROLLED.has(name)) {
       // Termux does not promise 16 KB alignment; keep the check but do not fail.
@@ -229,6 +251,19 @@ for (const r of results) {
   console.log(`  OK ${r.name} (${r.size} bytes, p_align=${align}) DT_NEEDED: ${list}`);
 }
 if (alignmentWarnings) {
-  console.warn(`\n${alignmentWarnings} Termux library(ies) below 16 KB alignment — packaged anyway (documented caveat).`);
+  console.warn(`\n${alignmentWarnings} Termux library(ies) below 16 KB alignment â€” packaged anyway (documented caveat).`);
 }
+
+// Sonames we ship that ALSO exist on Android. For any process that has this
+// directory on LD_LIBRARY_PATH they shadow the system copy, which is exactly how
+// `libffmpeg.so` ended up resolving /system/lib64/libsqlite.so's libcrypto.so to
+// our OpenSSL 3.x and dying on the dropped EVP_MD_CTX_init symbol. Node really
+// needs these siblings; tool processes are launched without the directory.
+const shadowed = files.filter((name) => ANDROID_SHIPPED_SONAMES.has(name));
+if (shadowed.length) {
+  console.log(`\nNOTE: bundled sonames that shadow Android system libraries: ${shadowed.join(', ')}`);
+  console.log('      Only libnode.so runs with this directory on LD_LIBRARY_PATH;');
+  console.log('      ffmpeg/ffprobe/whisper/llama are launched with it stripped (src/binaries.js toolEnv).');
+}
+
 console.log(`All ${results.length} engine libraries passed.`);

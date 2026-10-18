@@ -3,7 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const config = require('./config.js');
-const { findLlamaServer } = require('./binaries.js');
+const { findLlamaServer, toolEnv } = require('./binaries.js');
 
 function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
@@ -93,7 +93,7 @@ class LlamaServer {
         if (this.gpuLayers >= 0) args.push('-ngl', String(this.gpuLayers));
         if (this.threads > 0) args.push('-t', String(this.threads));
 
-        this.proc = spawn(this.bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        this.proc = spawn(this.bin, args, { stdio: ['ignore', 'pipe', 'pipe'], env: toolEnv(this.bin) });
         // a full copy on disk: a crash that swallows stdout still leaves evidence
         let logStream = null;
         if (!this.external) {
