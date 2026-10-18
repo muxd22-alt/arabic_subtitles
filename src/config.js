@@ -170,7 +170,7 @@ const AUDIO_CONCURRENCY = intEnv('AUDIO_CONCURRENCY', 2);
 
 const VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.m4v', '.mov', '.webm', '.ts', '.m2ts'];
 
-const OUTPUT_SUFFIX = '.ArabicSubs.ar.srt';
+const OUTPUT_SUFFIX = '.ArabicSubs.ar.ass';
 const BRANDED_NAME_MARKER = 'ArabicSubs';
 
 function ensureDirs() {

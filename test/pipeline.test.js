@@ -12,7 +12,7 @@ const {
     translateCues,
     processVideo
 } = require('../src/pipeline.js');
-const { WATERMARK_TEXT, parseSRT, validateSRT } = require('../src/srt.js');
+const { WATERMARK_TEXT, validateSRT } = require('../src/srt.js');
 
 function tmpDir() {
     return fs.mkdtempSync(path.join(os.tmpdir(), 'arabicsubs-test-'));
@@ -44,9 +44,15 @@ function fakeServer() {
     };
 }
 
+function assDialogues(filePath) {
+    return fs.readFileSync(filePath, 'utf8')
+        .split('\n')
+        .filter((line) => line.startsWith('Dialogue:'));
+}
+
 test('outputPathFor uses the ArabicSubs suffix', () => {
     const p = outputPathFor('/movies/Show/S01E01.mkv');
-    assert.strictEqual(path.basename(p), 'S01E01.ArabicSubs.ar.srt');
+    assert.strictEqual(path.basename(p), 'S01E01.ArabicSubs.ar.ass');
 });
 
 test('listSubtitleSiblings finds exact and language-tagged matches only', () => {
@@ -115,8 +121,12 @@ test('processVideo brands a ready-made Arabic subtitle without the model', async
 
     assert.strictEqual(res.status, 'branded');
     assert.ok(fs.existsSync(outputPathFor(video)));
-    const out = parseSRT(fs.readFileSync(outputPathFor(video), 'utf8'));
-    assert.strictEqual(out[0].text, WATERMARK_TEXT);
+    const raw = fs.readFileSync(outputPathFor(video), 'utf8');
+    assert.match(raw, /Style: Default,Thmanyah Sans/);
+    const dialogues = assDialogues(outputPathFor(video));
+    assert.strictEqual(dialogues.length, 3);
+    assert.ok(dialogues[0].endsWith(WATERMARK_TEXT));
+    assert.ok(dialogues[1].endsWith('مرحبا يا صديقي'));
     assert.strictEqual(logged[0].action, 'brand-arabic');
 });
 
@@ -134,11 +144,11 @@ test('processVideo translates an English subtitle through the fake server', asyn
 
     assert.strictEqual(res.status, 'translated');
     assert.strictEqual(res.cueCount, 2);
-    const out = parseSRT(fs.readFileSync(outputPathFor(video), 'utf8'));
-    assert.strictEqual(out.length, 3);
-    assert.strictEqual(out[0].text, WATERMARK_TEXT);
-    assert.match(out[1].text, /مرحبا رقم 0/);
-    assert.match(out[2].text, /مرحبا رقم 1/);
+    const dialogues = assDialogues(outputPathFor(video));
+    assert.strictEqual(dialogues.length, 3);
+    assert.ok(dialogues[0].endsWith(WATERMARK_TEXT));
+    assert.match(dialogues[1], /مرحبا رقم 0/);
+    assert.match(dialogues[2], /مرحبا رقم 1/);
 });
 
 test('processVideo skips when there is no subtitle and audio is disabled', async () => {

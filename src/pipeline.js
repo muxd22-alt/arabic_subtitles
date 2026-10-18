@@ -97,9 +97,9 @@ function isDone(videoPath) {
 
 function writeOutput(videoPath, cues) {
     const outPath = outputPathFor(videoPath);
-    const { buildSRT } = require('./srt.js');
+    const { buildASS } = require('./ass.js');
     const tmpPath = `${outPath}.tmp`;
-    fs.writeFileSync(tmpPath, buildSRT(cues), 'utf8');
+    fs.writeFileSync(tmpPath, buildASS(cues), 'utf8');
     fs.renameSync(tmpPath, outPath);
     return outPath;
 }

@@ -10,6 +10,7 @@ const { walkMedia, JobQueue, watchFolder } = require('../src/watcher.js');
 const { startStatusServer } = require('../src/status-server.js');
 const { logDecision, readDecisions } = require('../src/decision-log.js');
 const { parseSRT, validateSRT, normalizeToUtf8, buildSRT } = require('../src/srt.js');
+const { buildASS } = require('../src/ass.js');
 const { translateTexts } = require('../src/translate.js');
 const audio = require('../src/audio.js');
 
@@ -646,8 +647,8 @@ async function cmdTranslate(args) {
 
             const out = args.flags.out
                 ? String(args.flags.out)
-                : file.replace(/(\.srt)?$/i, '.ar.srt');
-            fs.writeFileSync(out, buildSRT(translatedCues), 'utf8');
+                : file.replace(/(\.srt)?$/i, '.ar.ass');
+            fs.writeFileSync(out, buildASS(translatedCues), 'utf8');
             logDecision({ file, action: 'translate-cli', source: file, cueCount: translatedCues.length, output: out, chunks: stats.batches });
             console.log(`[Translate] → ${out}`);
         }
