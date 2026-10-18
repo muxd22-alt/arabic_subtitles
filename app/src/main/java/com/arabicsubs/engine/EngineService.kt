@@ -60,7 +60,10 @@ data class EngineStatus(
     val progressDone: Int? = null,
     val progressTotal: Int? = null,
     // Wall-clock start of the current stage's progress, used for the ETA estimate.
-    val progressStartedAtMs: Long? = null
+    val progressStartedAtMs: Long? = null,
+    // Rolling engine output for the in-app terminal window. Oldest first, capped
+    // at EngineLog.MAX_LINES so a long run cannot grow it without bound.
+    val log: List<String> = emptyList()
 )
 
 class EngineService : Service() {
@@ -249,15 +252,19 @@ class EngineService : Service() {
     }
 
     private fun applyEvent(gen: Int, event: EngineEvent) {
+        val line = EngineLog.render(event)
         when (event) {
             is EngineEvent.Stage -> {
                 if (updateStatus(gen) {
-                        it.copy(
-                            stage = event.stage,
-                            lastLine = event.file,
-                            progressDone = null,
-                            progressTotal = null,
-                            progressStartedAtMs = null
+                        EngineLog.append(
+                            it.copy(
+                                stage = event.stage,
+                                lastLine = event.file,
+                                progressDone = null,
+                                progressTotal = null,
+                                progressStartedAtMs = null
+                            ),
+                            line
                         )
                     }) {
                     getSystemService(NotificationManager::class.java)
@@ -266,37 +273,46 @@ class EngineService : Service() {
             }
             is EngineEvent.Asr ->
                 updateStatus(gen) {
-                    it.copy(
-                        lastLine = "ASR ${event.done}/${event.total}",
-                        progressDone = event.done,
-                        progressTotal = event.total,
-                        progressStartedAtMs = it.progressStartedAtMs ?: System.currentTimeMillis()
+                    EngineLog.append(
+                        it.copy(
+                            lastLine = "ASR ${event.done}/${event.total}",
+                            progressDone = event.done,
+                            progressTotal = event.total,
+                            progressStartedAtMs = it.progressStartedAtMs ?: System.currentTimeMillis()
+                        ),
+                        line
                     )
                 }
             is EngineEvent.Translate ->
                 updateStatus(gen) {
-                    it.copy(
-                        lastLine = if (event.total == null) {
-                            "Translate ${event.done}"
-                        } else {
-                            "Translate ${event.done}/${event.total}"
-                        },
-                        progressDone = event.done,
-                        progressTotal = event.total,
-                        progressStartedAtMs = it.progressStartedAtMs ?: System.currentTimeMillis()
+                    EngineLog.append(
+                        it.copy(
+                            lastLine = if (event.total == null) {
+                                "Translate ${event.done}"
+                            } else {
+                                "Translate ${event.done}/${event.total}"
+                            },
+                            progressDone = event.done,
+                            progressTotal = event.total,
+                            progressStartedAtMs = it.progressStartedAtMs ?: System.currentTimeMillis()
+                        ),
+                        line
                     )
                 }
             is EngineEvent.Queue ->
                 updateStatus(gen) {
-                    it.copy(
-                        lastLine = event.file,
-                        progressDone = null,
-                        progressTotal = null,
-                        progressStartedAtMs = null
+                    EngineLog.append(
+                        it.copy(
+                            lastLine = event.file,
+                            progressDone = null,
+                            progressTotal = null,
+                            progressStartedAtMs = null
+                        ),
+                        line
                     )
                 }
             is EngineEvent.Raw ->
-                updateStatus(gen) { it.copy(lastLine = event.line) }
+                updateStatus(gen) { EngineLog.append(it.copy(lastLine = event.line), line) }
         }
     }
 

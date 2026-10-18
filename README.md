@@ -33,13 +33,26 @@ your phone.**
 | | Step | What you do |
 | :--: | :--- | :--- |
 | **1** | **Install** | Install the [latest APK](https://github.com/muxd22-alt/arabic_subtitles/releases/latest). It is sideloaded — there is no Play Store listing. |
-| **2** | **Grant & pick** | Allow **all-files access**, then tap **«إضافة مجلد أفلام / مسلسلات»** and pick your Movies / TV folder (e.g. `/sdcard/Movies`). |
+| **2** | **Grant & pick** | Allow **all-files access**, then open the **gear icon → الإعدادات** and tap **«إضافة مجلد أفلام / مسلسلات»** to pick your Movies / TV folder (e.g. `/sdcard/Movies`). |
 | **3** | **Download the models** | Tap **نزّل النموذج**. This also installs/repairs the bundled engine, then downloads the translation + speech models **once** into `<your folder>/ArabicSubs/models/` (~1.2 GB, resumable). |
 | **4** | **Run** | Tap **تشغيل الكل** to work through the whole queue, or **▶ ترجمة** on one row to translate a single file. |
 
 The first launch walks you through steps 1–3 with a short wizard. On later runs
 you only touch the dashboard. A **تنظيف وفحص** button clears skipped items and
 re-checks the sidecars already on disk.
+
+Everything that is *setup* rather than everyday use now lives behind the **gear
+icon (الإعدادات)**, in the same order the wizard asks for it: file access, the
+media folders (**مكتبتي** — add, change or remove the location), the model
+download, and **توازي الترجمة**. The dashboard keeps the run controls, the
+library, and a collapsible **engine log (سجل المحرك)** that shows progress and
+every error without leaving the app.
+
+**توازي الترجمة** is one number for the whole run — how many audio chunks
+whisper transcribes at once, how many translation requests llama serves at once,
+and how many llama slots back them. It goes from **1 to your device's core
+count (max 8)**: higher means a faster run and a hotter phone. Pick **1** to keep
+the phone cool.
 
 <details>
 <summary>What if something goes wrong</summary>

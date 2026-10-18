@@ -19,11 +19,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
 import com.arabicsubs.engine.EngineMode
 import com.arabicsubs.engine.EngineService
+import com.arabicsubs.engine.EngineStatus
 import com.arabicsubs.storage.AllFilesAccess
 import com.arabicsubs.ui.theme.*
 import org.json.JSONArray
@@ -70,14 +70,21 @@ class MainActivity : ComponentActivity() {
     private var skippedCount by mutableStateOf(0)
     private var isScanning by mutableStateOf(false)
     private var showWizard by mutableStateOf(false)
-    // translation parallelism + llama slots for the one movie being worked on
-    private var slots by mutableStateOf(2)
+    private var showSettings by mutableStateOf(false)
+    // ONE parallelism number for the whole run: the same value drives how many
+    // whisper chunks are transcribed at once, how many translation requests run
+    // at once, and how many llama slots serve them.
+    private var parallelism by mutableStateOf(2)
 
     // the wizard only auto-opens the very first time, never again after "تم"
     private val prefs by lazy { getSharedPreferences("arabic_subs", Context.MODE_PRIVATE) }
 
-    private val threads: Int
+    /** Cores are also the ceiling: never offer more parallel work than the phone has cores. */
+    private val maxParallelism: Int
         get() = Runtime.getRuntime().availableProcessors().coerceIn(1, 8)
+
+    private val threads: Int
+        get() = maxParallelism
 
     private val folderPickerLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -98,7 +105,8 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        slots = prefs.getInt("slots", 2).coerceIn(1, 4)
+        // "slots" is the old key, kept as a fallback so an upgrade keeps the choice
+        parallelism = prefs.getInt("parallelism", prefs.getInt("slots", 2)).coerceIn(1, maxParallelism)
         // first launch → straight into the setup walkthrough
         if (!prefs.getBoolean("setup_done", false)) showWizard = true
         // Restore the folders the user picked in an earlier session: the tree URIs
@@ -125,7 +133,7 @@ class MainActivity : ComponentActivity() {
                                         color = Gold500.copy(alpha = 0.15f),
                                     ) {
                                         Text(
-                                            "v2.4",
+                                            "v2.5",
                                             color = AccentText,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
@@ -135,8 +143,10 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             actions = {
-                                IconButton(onClick = { showWizard = true }) {
-                                    Icon(Icons.Default.List, contentDescription = "الإعداد خطوة بخطوة", tint = AccentText)
+                                // Everything configuration-shaped lives behind the gear,
+                                // so the dashboard stays about the library and the run.
+                                IconButton(onClick = { showSettings = true }) {
+                                    Icon(Icons.Default.Settings, contentDescription = "الإعدادات", tint = AccentText)
                                 }
                             },
                             colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
@@ -147,7 +157,22 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize().padding(paddingValues),
                         color = DarkBg
                     ) {
-                        DashboardScreen(context)
+                        if (showSettings) {
+                            SettingsScreen(
+                                folders = folders,
+                                parallelism = parallelism,
+                                maxParallelism = maxParallelism,
+                                onAddFolder = {
+                                    folderPickerLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE))
+                                },
+                                onRemoveFolder = { removeFolder(it) },
+                                onChooseSlots = { chooseParallelism(it) },
+                                onOpenWizard = { showWizard = true },
+                                onClose = { showSettings = false }
+                            )
+                        } else {
+                            DashboardScreen(context)
+                        }
                         if (showWizard) {
                             SetupWizard(
                                 mediaPaths = folders.map { it.rawPath },
@@ -251,10 +276,10 @@ class MainActivity : ComponentActivity() {
 
     // ── Engine launch ─────────────────────────────────────────────────
 
-    /** Translation parallelism + llama slots for the single movie being worked on. */
-    private fun chooseSlots(n: Int) {
-        slots = n.coerceIn(1, 4)
-        prefs.edit().putInt("slots", slots).apply()
+    /** One parallelism number for whisper chunks, translation requests and llama slots. */
+    private fun chooseParallelism(n: Int) {
+        parallelism = n.coerceIn(1, maxParallelism)
+        prefs.edit().putInt("parallelism", parallelism).apply()
     }
 
     private fun runAllFolders(context: Context) {
@@ -263,13 +288,13 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (!ensureAllFilesAccess(context)) return
-        EngineService.start(context, EngineMode.Run(folders.map { it.rawPath }, slots, threads))
+        EngineService.start(context, EngineMode.Run(folders.map { it.rawPath }, parallelism, threads))
         Toast.makeText(context, "بدأت الترجمة", Toast.LENGTH_SHORT).show()
     }
 
     private fun runSingleFile(context: Context, path: String) {
         if (!ensureAllFilesAccess(context)) return
-        EngineService.start(context, EngineMode.Process(path, slots, threads))
+        EngineService.start(context, EngineMode.Process(path, parallelism, threads))
         Toast.makeText(context, "بدأت ترجمة هذا الملف", Toast.LENGTH_SHORT).show()
     }
 
@@ -362,14 +387,19 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun DashboardScreen(context: Context) {
+        val engineStatus by EngineService.status.collectAsState()
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .padding(horizontal = Space.screen, vertical = Space.lg)
         ) {
             // Pinned: the engine tile must never scroll away, so the progress bar
             // and the current stage stay visible while everything else scrolls.
-            EngineStatusCard()
+            EngineStatusCard(
+                status = engineStatus,
+                onStop = { EngineService.stop(context) }
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -390,8 +420,6 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     contentPadding = PaddingValues(bottom = Space.xl)
                 ) {
-                    item(key = "controls") { DashboardControls() }
-
                     item(key = "stats") {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -441,15 +469,16 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    // The terminal window: what the engine is doing, and every
+                    // error it reported, without leaving the dashboard.
+                    item(key = "log") {
+                        EngineLogCard(engineStatus)
+                        Spacer(modifier = Modifier.height(Space.md))
+                    }
+
                     if (itemList.isEmpty()) {
                         item(key = "empty") {
-                            Text(
-                                "اختر مجلد الأفلام أو المسلسلات لبدء الفحص",
-                                color = TextMuted,
-                                fontSize = 15.sp,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth().padding(vertical = Space.xl)
-                            )
+                            EmptyLibrary(onOpenSettings = { showSettings = true })
                         }
                     } else {
                         val grouped = itemList.groupBy { it.folderName }
@@ -487,80 +516,43 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Empty state of the library, pointing at the one place folders live now. */
     @Composable
-    fun DashboardControls() {
-        Column(modifier = Modifier.fillMaxWidth()) {
+    fun EmptyLibrary(onOpenSettings: () -> Unit) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(vertical = Space.xl),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "مكتبتك فارغة",
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(Space.xs))
+            Text(
+                "أضف مجلد الأفلام أو المسلسلات من الإعدادات لبدء الفحص والترجمة.",
+                color = TextMuted,
+                fontSize = 13.sp,
+                lineHeight = 19.sp,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(Space.lg))
             Button(
-                onClick = {
-                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                    folderPickerLauncher.launch(intent)
-                },
-                modifier = Modifier.fillMaxWidth().height(58.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Accent),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
-            ) {
-                Icon(Icons.Default.Movie, contentDescription = null, tint = DarkBg, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("إضافة مجلد أفلام / مسلسلات", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = DarkBg)
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            OutlinedButton(
-                onClick = { showWizard = true },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
+                onClick = onOpenSettings,
                 shape = RoundedCornerShape(14.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Accent.copy(alpha = 0.5f))
+                colors = ButtonDefaults.buttonColors(containerColor = Accent)
             ) {
-                Icon(Icons.Default.List, contentDescription = null, tint = Accent, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("الإعداد خطوة بخطوة", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Accent)
+                Icon(Icons.Default.Settings, contentDescription = null, tint = DarkBg, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(Space.sm))
+                Text("فتح الإعدادات", color = DarkBg, fontSize = 14.sp, fontWeight = FontWeight.Bold)
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (folders.isNotEmpty()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = DarkCard),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        folders.forEach { folder ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(modifier = Modifier.size(8.dp).background(SuccessGreen, CircleShape))
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(
-                                    folder.rawPath,
-                                    fontSize = 12.sp,
-                                    color = TextSecondary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(
-                                    onClick = { removeFolder(folder) }
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = "إزالة ${folder.displayName}", tint = TextSecondary, modifier = Modifier.size(18.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-            }
-
-            ParallelismSelector()
         }
     }
 
     @Composable
-    fun EngineStatusCard() {
-        val status by EngineService.status.collectAsState()
+    fun EngineStatusCard(status: EngineStatus, onStop: () -> Unit) {
         val (label, accent) = when {
             status.failedToStart != null -> "المحرك: تعذّر التشغيل" to ErrorRose
             status.running && !status.stage.isNullOrEmpty() -> "المحرك: يعمل — ${status.stage}" to SuccessGreen
@@ -625,6 +617,22 @@ class MainActivity : ComponentActivity() {
                             color = accent
                         )
                     }
+
+                    // A visible way out when a stage looks stuck.
+                    if (status.running) {
+                        Spacer(modifier = Modifier.width(Space.sm))
+                        OutlinedButton(
+                            onClick = onStop,
+                            modifier = Modifier.height(Space.touch),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = Space.sm),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ErrorRose.copy(alpha = 0.6f))
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null, tint = ErrorRose, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(Space.xs))
+                            Text("إيقاف", color = ErrorRose, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
 
                 if (status.running) {
@@ -670,63 +678,6 @@ class MainActivity : ComponentActivity() {
             remainingSec < 60 -> "أقل من دقيقة"
             remainingSec < 3600 -> "≈ ${remainingSec / 60} دقيقة"
             else -> "≈ ${remainingSec / 3600} ساعة"
-        }
-    }
-
-    @Composable
-    fun ParallelismSelector() {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = DarkCard),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Settings, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("توازي الترجمة", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text("$slots", color = TextMuted, fontSize = 11.sp)
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    (1..4).forEach { n ->
-                        val selected = slots == n
-                        val onClick = { chooseSlots(n) }
-                        if (selected) {
-                            Button(
-                                onClick = onClick,
-                                modifier = Modifier.weight(1f).height(44.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(0.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Accent)
-                            ) {
-                                Text("$n", color = DarkBg, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            }
-                        } else {
-                            OutlinedButton(
-                                onClick = onClick,
-                                modifier = Modifier.weight(1f).height(44.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(0.dp),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, DarkBorder)
-                            ) {
-                                Text("$n", color = TextSecondary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            }
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    "يضبط عدد المقاطع المترجمة بالتوازي داخل الفيلم الواحد وعدد فتحات llama — الجودة نفسها لكن أسرع. اختر ١ لتقليل استهلاك الجهاز.",
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    lineHeight = 16.sp
-                )
-            }
         }
     }
 

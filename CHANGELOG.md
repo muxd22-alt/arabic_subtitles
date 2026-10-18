@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.5 — one parallelism knob, settings behind the gear, in-app engine log
+
+- **Settings behind the gear icon.** Everything that is configuration rather than
+  everyday use left the dashboard and moved into a numbered, step-by-step
+  **الإعدادات** screen: file access, **مكتبتي** (add / change / remove media
+  folders — so the library location is no longer locked in after first-run
+  setup), the model download, and translation parallelism. The first-run wizard
+  still opens by itself and can be relaunched from settings.
+- **توازي الترجمة is now one number for the whole run** (1 up to the device's
+  core count, max 8) instead of a fixed 1–4 for translation only. The same value
+  now drives how many audio chunks `whisper-cli` transcribes at once
+  (`AUDIO_CONCURRENCY`), how many translation requests llama serves at once
+  (`TRANSLATE_CONCURRENCY`) and how many llama slots exist (`LLAMA_PARALLEL`).
+  Higher is faster and hotter; the UI warns before you pick the ceiling and the
+  choice persists across launches.
+- **In-app engine log (سجل المحرك).** A collapsible terminal window on the
+  dashboard shows the engine's live output — stage changes, ASR/translate
+  progress, queue lines — with errors highlighted and an error count, so a
+  failure is readable without a computer or Termux. Backed by a bounded
+  300-line buffer on `EngineStatus`, fed through the new pure `EngineLog`
+  formatter.
+- The dashboard now also has a visible **إيقاف** button while the engine runs,
+  and the empty state points at settings instead of dead-ending.
+- Version is **2.5** across `package.json` (which drives the CI release tag
+  `v2.5`), `versionCode 16` / `versionName "2.5"`, the app badge and the landing
+  page.
+
 ## 2.4 — self-contained app: ASS output, honest docs
 
 - The app is now **truly self-contained**: the Node runtime and every native

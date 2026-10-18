@@ -12,6 +12,7 @@ class EngineLaunchTest {
             home = "/storage/emulated/0/ArabicSubs")
         assertEquals("/lib/libnode.so", l.binary)
         assertEquals(listOf("/files/node/bin/arabic-subs.js", "run", "--media", "/v", "--yes"), l.argv)
+        assertEquals("4", l.env["AUDIO_CONCURRENCY"])
         assertEquals("4", l.env["TRANSLATE_CONCURRENCY"])
         assertEquals("4", l.env["LLAMA_PARALLEL"])
         assertEquals("2", l.env["THREADS"])

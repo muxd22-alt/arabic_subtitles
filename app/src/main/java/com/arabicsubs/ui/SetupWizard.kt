@@ -53,7 +53,7 @@ fun buildWizardSteps(): List<WizardStep> = listOf(
     ),
     WizardStep(
         title = "٢ — اختر مجلد الأفلام",
-        hint = "اختر مجلد الأفلام أو المسلسلات. يمكنك إضافة أكثر من مجلد من الشاشة الرئيسية.",
+        hint = "اختر مجلد الأفلام أو المسلسلات. يمكنك إضافة المزيد أو تغيير المكان لاحقاً من الإعدادات.",
         kind = WizardStepKind.FOLDER
     ),
     WizardStep(
@@ -161,7 +161,7 @@ fun SetupWizard(
 }
 
 @Composable
-private fun AccessStep(context: Context) {
+fun AccessStep(context: Context) {
     // AllFilesAccess is not Compose state, so re-read it on demand
     var refresh by remember { mutableStateOf(0) }
     val granted = remember(refresh) { AllFilesAccess.granted(context) }
@@ -231,7 +231,7 @@ private fun FolderStep(mediaPaths: List<String>, onPickFolders: () -> Unit) {
 }
 
 @Composable
-private fun ModelStep(context: Context, mediaPaths: List<String>, status: EngineStatus) {
+fun ModelStep(context: Context, mediaPaths: List<String>, status: EngineStatus) {
     val running = status.running
 
     Button(

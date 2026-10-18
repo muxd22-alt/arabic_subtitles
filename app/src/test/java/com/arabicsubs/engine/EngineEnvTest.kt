@@ -17,6 +17,7 @@ class EngineEnvTest {
         assertEquals("/data/app/lib/arm64/libffmpeg.so", env["FFMPEG_BIN"])
         assertEquals("/data/app/lib/arm64/libffprobe.so", env["FFPROBE_BIN"])
         assertEquals("/data/app/lib/arm64", env["LD_LIBRARY_PATH"])
+        assertEquals("4", env["AUDIO_CONCURRENCY"])
         assertEquals("4", env["TRANSLATE_CONCURRENCY"])
         assertEquals("4", env["LLAMA_PARALLEL"])
         assertEquals("8", env["THREADS"])
@@ -32,6 +33,7 @@ class EngineEnvTest {
     @Test
     fun setup_omits_slot_and_thread_keys() {
         val env = EngineEnv.forSetup("/storage/emulated/0/ArabicSubs", "/data/app/lib/arm64")
+        assertFalse(env.containsKey("AUDIO_CONCURRENCY"))
         assertFalse(env.containsKey("TRANSLATE_CONCURRENCY"))
         assertFalse(env.containsKey("LLAMA_PARALLEL"))
         assertFalse(env.containsKey("THREADS"))
