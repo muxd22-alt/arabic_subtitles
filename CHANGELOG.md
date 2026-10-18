@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.4 — self-contained app: ASS output, honest docs
+
+- The app is now **truly self-contained**: the Node runtime and every native
+  tool (`libnode.so`, `libllama-server.so`, `libwhisper-cli.so`, `libffmpeg.so`,
+  `libffprobe.so` and Node's runtime libraries) are committed to the repo and
+  packaged into the APK as `arm64-v8a` libraries, then unpacked and run as the
+  app's own child process. There is **no Termux**, no companion installer, no
+  `pkg install` and no `ArabicSubs.sh`.
+- Subtitle output is **ASS**, not SRT: every video gets
+  `<base>.ArabicSubs.ar.ass`, styled with the fontname **`Thmanyah Sans`**.
+  Existing `.ArabicSubs.ar.srt` files from earlier releases are still recognised
+  as done, so an upgrade never re-translates an existing library. A video player
+  must have the Thmanyah Sans font installed to render it (the OTFs ship in
+  `docs/fonts/`).
+- The UI is forced **RTL** (Arabic) regardless of device locale.
+- First run is three real steps inside the app — allow all-files access, choose
+  the media folder, then download the models once into
+  `<media>/ArabicSubs/models/` — after which the dashboard runs the whole queue
+  (**تشغيل الكل**), a single file (**▶ ترجمة**), or cleans and re-scans
+  (**تنظيف وفحص**).
+- Docs rewrite: `README.md`, `app/README.md` and the landing page
+  (`docs/index.html`) no longer describe the dead Termux workflow; they document
+  the self-contained app, the ASS output and the font requirement.
+- Requires **Android 9 (API 28)+**, **arm64-v8a**. Version is **2.4** across
+  `package.json` (which drives the CI release tag `v2.4`), `versionCode 15` /
+  `versionName "2.4"` and the app's version badge.
+
 ## 2.3 — the engine runs inside the app (no Termux)
 
 - **Termux is gone.** The app now carries its own Node engine and native tools
