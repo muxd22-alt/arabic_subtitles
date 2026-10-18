@@ -5,7 +5,7 @@ const config = require('../src/config.js');
 const { modelStatus, whisperStatus, downloadModel, downloadWhisperModel } = require('../src/model.js');
 const { LlamaServer, findLlamaServer } = require('../src/llama.js');
 const { findWhisper, transcribeMedia } = require('../src/asr.js');
-const { processVideo, findSubtitleSource, outputPathFor } = require('../src/pipeline.js');
+const { processVideo, findSubtitleSource, outputPathFor, isDone } = require('../src/pipeline.js');
 const { walkMedia, JobQueue, watchFolder } = require('../src/watcher.js');
 const { startStatusServer } = require('../src/status-server.js');
 const { logDecision, readDecisions } = require('../src/decision-log.js');
@@ -13,6 +13,11 @@ const { parseSRT, validateSRT, normalizeToUtf8, buildSRT } = require('../src/srt
 const { buildASS } = require('../src/ass.js');
 const { translateTexts } = require('../src/translate.js');
 const audio = require('../src/audio.js');
+const Bazaar = require('../src/providers/index.js');
+const embeddedProvider = require('../src/providers/embedded.js');
+const providerHealth = require('../src/provider-health.js');
+const { parseRelease } = require('../src/release.js');
+const langsInfo = require('../src/langs.js');
 
 function parseArgs(argv) {
     const args = { _: [], flags: {} };
@@ -508,6 +513,122 @@ async function startServer(flags, attempt = 0) {
     return server;
 }
 
+function isTruthyFlag(value) {
+    return value === true || value === 'true' || value === '1' || value === 'yes';
+}
+
+/** The provider table in the shape Bazarr users already know. */
+function providerTableLines(options = {}) {
+    const rows = Bazaar.statusRows();
+    const nameWidth = Math.max(20, ...rows.map((r) => String(r.name).length + 2));
+    const lines = [
+        `${'Name'.padEnd(nameWidth)}${'Status'.padEnd(18)}Next Retry`
+    ];
+    for (const row of rows) {
+        lines.push(`${String(row.name).padEnd(nameWidth)}${String(row.status).padEnd(18)}${row.nextRetry}`);
+        if (row.status !== 'Good' && row.lastError && options.explain !== false) {
+            lines.push(`${' '.repeat(nameWidth)}↳ ${row.lastError}`);
+        }
+    }
+    return lines;
+}
+
+function printProviderTable(options = {}) {
+    console.log('[Providers] Free subtitle sources (local first, then the web):');
+    for (const line of providerTableLines(options)) console.log(`  ${line}`);
+    const missing = Bazaar.availability().filter((entry) => !entry.ok);
+    if (missing.length > 0) {
+        console.log('[Providers] Key-based providers stay off until you add their free keys to .env:');
+        for (const entry of missing) {
+            console.log(`  ${entry.provider.label}: ${entry.reason}`);
+        }
+    }
+}
+
+async function cmdProviders(args) {
+    if (isTruthyFlag(args.flags.reset)) {
+        const id = args.flags.reset === true ? null : String(args.flags.reset);
+        providerHealth.reset(id);
+        console.log(id ? `[Providers] Health reset for ${id}.` : '[Providers] Health reset for all providers.');
+    }
+    const rows = Bazaar.statusRows();
+    const nameWidth = Math.max(20, ...rows.map((r) => String(r.name).length + 2));
+    console.log(`${'Name'.padEnd(nameWidth)}${'Status'.padEnd(20)}Next Retry`);
+    for (const row of rows) {
+        console.log(`${String(row.name).padEnd(nameWidth)}${String(row.status).padEnd(20)}${row.nextRetry}`);
+        if (row.lastError && row.status !== 'Good') {
+            console.log(`${' '.repeat(nameWidth)}↳ ${row.lastError}`);
+        }
+    }
+    const missing = Bazaar.availability().filter((entry) => !entry.ok);
+    if (missing.length > 0) {
+        console.log('\nNot configured (free, but needs an account key — add to .env):');
+        for (const entry of missing) console.log(`  ${entry.provider.label}: ${entry.reason}`);
+    }
+    console.log(`\nHealth file: ${providerHealth.storePath()}`);
+    return 0;
+}
+
+/**
+ * `fetch` is the bazaar on its own: for each video it prints what every
+ * provider offers, then (with --download) saves the best match next to the
+ * video using the same name the local scan reads back.
+ */
+async function cmdFetch(args) {
+    const files = args._.slice(1);
+    if (files.length === 0) {
+        console.error('Usage: arabic-subs fetch <video>… [--provider id] [--download] [--langs ar,en]');
+        return 1;
+    }
+    const only = args.flags.provider ? [String(args.flags.provider)] : null;
+    const sourceLanguages = args.flags.langs
+        ? String(args.flags.langs).split(',').map((c) => c.trim()).filter(Boolean)
+        : config.PROVIDER_LANGUAGES;
+
+    let failures = 0;
+    for (const file of files) {
+        if (!fs.existsSync(file)) {
+            console.error(`[Fetch] Not found: ${file}`);
+            failures++;
+            continue;
+        }
+        const release = parseRelease(file);
+        const episode = release.season != null ? ` S${String(release.season).padStart(2, '0')}E${String(release.episode).padStart(2, '0')}` : '';
+        console.log(`[Fetch] ${path.basename(file)} → "${release.title}"${release.year ? ` (${release.year})` : ''}${episode}` +
+            `${release.imdb ? ` [${release.imdb}]` : ''}`);
+
+        const search = await Bazaar.searchAll(release, { only, sourceLanguages });
+        for (const [id, info] of Object.entries(search.perProvider)) {
+            const note = info.error ? ` — ${info.error}` : (info.skipped ? ` — ${info.skipped}` : '');
+            console.log(`  ${id.padEnd(18)} ${String(info.count).padStart(3)} candidate(s)${note}`);
+        }
+
+        const ranked = Bazaar.rankCandidates(search.candidates, release, { sourceLanguages });
+        for (const candidate of ranked.slice(0, 12)) {
+            const lang = `${candidate.langCode || 'und'}`.padEnd(5);
+            console.log(`  • ${String(candidate.provider).padEnd(16)} ${lang} ${candidate.releaseName || ''}${candidate.downloads ? ` [${candidate.downloads} dl]` : ''}`);
+        }
+        if (ranked.length === 0) {
+            console.log('  (the bazaar found nothing — the on-device transcript would be next)');
+            failures++;
+            continue;
+        }
+
+        if (isTruthyFlag(args.flags.download)) {
+            const acquired = await Bazaar.acquire(release, { searchResult: search, sourceLanguages });
+            if (acquired.ok) {
+                const saved = Bazaar.saveSidecar(file, acquired.langCode, acquired.provider, acquired.cues);
+                const note = acquired.langCode === 'ar' ? 'ready-made Arabic' : `translate from ${acquired.language}`;
+                console.log(`  ↓ saved ${path.basename(saved)} (${acquired.provider}, ${acquired.cueCount || acquired.cues.length} cues) — ${note}`);
+            } else {
+                console.log(`  ↓ every download failed: ${(acquired.notes || []).slice(0, 3).join('; ')}`);
+                failures++;
+            }
+        }
+    }
+    return failures > 0 ? 1 : 0;
+}
+
 async function cmdRun(args) {
     config.ensureDirs();
 
@@ -521,6 +642,12 @@ async function cmdRun(args) {
     if (!(await ensureDownloads(args.flags))) return 1;
     if (!(await ensureLlamaServer(args.flags))) return 1;
 
+    const useProviders = !isTruthyFlag(args.flags['no-providers']) && !isTruthyFlag(args.flags['no-fetch']);
+    const useEmbedded = !isTruthyFlag(args.flags['no-embedded']);
+    const once = isTruthyFlag(args.flags.once);
+
+    printProviderTable();
+
     const server = await startServer(args.flags);
     if (!server) return 1;
 
@@ -529,6 +656,9 @@ async function cmdRun(args) {
         process: async (file) => {
             return processVideo(file, {
                 server,
+                providers: useProviders,
+                embedded: useEmbedded,
+                onNote: (line) => console.log(line),
                 onStage: (s) => console.log(`[Stage] ${path.basename(file)} → ${s.stage}${s.source ? ` (${s.source})` : ''}${s.cueCount ? ` (${s.cueCount} cues)` : ''}`),
                 onProgress: (p) => {
                     if (p.stage === 'extract') {
@@ -554,7 +684,11 @@ async function cmdRun(args) {
         }
         console.log(`[Engine] Watching ${dir}`);
         watchers.push(watchFolder(dir, queue, {
-            intervalMs: Number.parseInt(args.flags['scan-interval'], 10) || 15000
+            intervalMs: Number.parseInt(args.flags['scan-interval'], 10) || 15000,
+            onScan: (r) => console.log(
+                `[Library] ${r.dir}: ${r.total} video(s) — ${r.done} done, ${r.fresh} new` +
+                (r.changed ? `, ${r.changed} re-queued (new subtitle)` : '')
+            )
         }));
     }
 
@@ -562,6 +696,16 @@ async function cmdRun(args) {
         console.error('[Engine] No valid media folders.');
         await server.stop();
         return 1;
+    }
+
+    if (once) {
+        for (const w of watchers) w.stop();
+        console.log('[Engine] --once: scanning everything, then exiting.');
+        await queue.whenIdle();
+        const finalStatus = queue.status();
+        console.log(`[Library] finished — done: ${finalStatus.done}, failed: ${finalStatus.failed}`);
+        await server.stop();
+        return finalStatus.failed > 0 ? 1 : 0;
     }
 
     const state = () => ({
@@ -698,18 +842,68 @@ async function cmdTranscribe(args) {
 async function cmdScan(args) {
     const dirs = args._.slice(1);
     if (dirs.length === 0) dirs.push('/sdcard/Movies');
+    const doSearch = isTruthyFlag(args.flags.search);
+    const langs = args.flags.langs
+        ? String(args.flags.langs).split(',').map((c) => c.trim()).filter(Boolean)
+        : config.PROVIDER_LANGUAGES;
+
     let total = 0;
+    let doneCount = 0;
     for (const dir of dirs) {
         const files = walkMedia(dir);
         console.log(`[Scan] ${dir}`);
         for (const file of files) {
-            const done = require('../src/pipeline.js').isDone(file);
-            const source = findSubtitleSource(file);
-            console.log(`  ${done ? '✓' : ' '} ${path.basename(file)}  [${source.kind}]`);
             total++;
+            const done = isDone(file);
+            if (done) doneCount++;
+            const source = findSubtitleSource(file);
+
+            let plan;
+            if (done) {
+                plan = 'done';
+            } else if (source.kind === 'arabic') {
+                plan = `brand (${source.langCode}, already Arabic)`;
+            } else if (source.kind === 'english') {
+                plan = `translate ${source.langCode} ← ${path.basename(source.path)}`;
+            } else {
+                let streams = [];
+                if (config.PROVIDER_EMBEDDED && audio.findFfprobe()) {
+                    try {
+                        streams = await embeddedProvider.listSubtitleStreams(file, { timeoutMs: 8000 });
+                    } catch (e) { }
+                }
+                const textTracks = embeddedProvider.rankStreams(streams);
+                if (textTracks.length > 0) {
+                    plan = `embedded (${embeddedProvider.summarize(textTracks)})`;
+                } else if (streams.length > 0) {
+                    plan = 'embedded image-only track (needs OCR)';
+                } else {
+                    plan = 'bazaar → whisper (last resort)';
+                }
+            }
+            console.log(`  ${done ? '✓' : ' '} ${path.basename(file)}  [${plan}]`);
+
+            if (doSearch && !done && source.kind === 'none') {
+                const release = parseRelease(file);
+                try {
+                    const search = await Bazaar.searchAll(release, { sourceLanguages: langs });
+                    const ranked = Bazaar.rankCandidates(search.candidates, release, { sourceLanguages: langs });
+                    if (ranked.length === 0) {
+                        console.log('      └ bazaar: nothing found');
+                    } else {
+                        for (const candidate of ranked.slice(0, 5)) {
+                            console.log(`      └ ${candidate.provider}/${candidate.langCode}` +
+                                ` — ${candidate.releaseName || '(no release name)'}` +
+                                `${candidate.downloads ? ` [${candidate.downloads} dl]` : ''}`);
+                        }
+                    }
+                } catch (e) {
+                    console.log(`      └ bazaar error: ${e.message}`);
+                }
+            }
         }
     }
-    console.log(`[Scan] ${total} video(s)`);
+    console.log(`[Scan] ${total} video(s), ${doneCount} already done`);
     return 0;
 }
 
@@ -755,6 +949,9 @@ async function cmdProcess(args) {
     if (!(await ensureDownloads(args.flags))) return 1;
     if (!(await ensureLlamaServer(args.flags))) return 1;
 
+    const useProviders = !isTruthyFlag(args.flags['no-providers']) && !isTruthyFlag(args.flags['no-fetch']);
+    const useEmbedded = !isTruthyFlag(args.flags['no-embedded']);
+
     const server = await startServer(args.flags);
     if (!server) return 1;
 
@@ -767,6 +964,9 @@ async function cmdProcess(args) {
             console.log(`[Process] Processing ${path.basename(file)}…`);
             const res = await processVideo(file, {
                 server,
+                providers: useProviders,
+                embedded: useEmbedded,
+                onNote: (line) => console.log(line),
                 onStage: (s) => console.log(`[Stage] ${path.basename(file)} → ${s.stage}${s.source ? ` (${s.source})` : ''}${s.cueCount ? ` (${s.cueCount} cues)` : ''}`),
                 onProgress: (p) => {
                     if (p.stage === 'extract') {
@@ -803,7 +1003,10 @@ Usage: arabic-subs <command> [options]
 Commands:
   setup                      Download the translation + whisper models (both at once)
   run --media <dir>          Watch folders and translate everything (the main engine)
+  run --media <dir> --once   Scan everything now, then exit (good for cron)
   process <video>…           Process specific video file(s) one-shot through the pipeline
+  fetch <video>…             Ask the subtitle bazaar what it can find for a video
+  providers                  Show provider health (status + next retry)
   translate <file.srt>…      Translate SRT files with the local model
   transcribe <media>…        Extract speech from video/audio into an English SRT (ffmpeg + whisper)
   scan [dir]…                List videos and which subtitle source each would use
@@ -817,6 +1020,13 @@ Options:
   --no-download              Never download; fail if a model is missing
   --skip-model               setup: skip the translation model download
   --skip-whisper             setup: skip the whisper model download
+  --no-providers             Disable the online subtitle bazaar (local sidecars + whisper only)
+  --no-embedded              Do not read subtitle tracks stored inside the video file
+  --once                     run: scan the folders once, process everything, then exit
+  --search                   scan: also ask the providers what they have (network)
+  --provider <id>            fetch: use only one provider
+  --langs ar,en,es           Languages to ask providers for (Arabic first = brand, no AI)
+  --download                 fetch: save the best match next to the video
   --out <file>               translate/transcribe output path
   --verbose                  Show llama-server logs
   --scan-interval <sec>      Folder rescan interval (default 15)
@@ -825,6 +1035,12 @@ Environment:
   HYMT_MODEL_FLAVOR          model to use: q4_k_m (default), q6_k, q8_0, stq
   HYMT2_MODEL, WHISPER_MODEL, LLAMA_PORT, STATUS_PORT, LLAMA_BASE_URL,
   TRANSLATE_CONCURRENCY, TRANSLATE_BATCH_LINES, AUDIO_CONCURRENCY, NGL, THREADS
+  ARABIC_SUBS_PROVIDERS      set 0 to keep the bazaar offline (default 1)
+  PROVIDER_LANGUAGES         languages to ask for (default ar,en,es)
+  PROVIDER_TIMEOUT_MS        per-provider search timeout (default 15000)
+  SUBDL_API_KEY              free key from subdl.com (optional)
+  OPENSUBTITLES_API_KEY      free key from opensubtitles.com (optional)
+  OPENSUBTITLES_USERNAME / OPENSUBTITLES_PASSWORD   free account for downloads (optional)
 `);
     return 0;
 }
@@ -839,6 +1055,8 @@ async function main(argv0) {
             case 'setup': return await cmdSetup(args);
             case 'run': return await cmdRun(args);
             case 'process': return await cmdProcess(args);
+            case 'fetch': return await cmdFetch(args);
+            case 'providers': return await cmdProviders(args);
             case 'translate': return await cmdTranslate(args);
             case 'transcribe': return await cmdTranscribe(args);
             case 'scan': return await cmdScan(args);

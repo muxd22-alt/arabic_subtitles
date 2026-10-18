@@ -6,14 +6,14 @@
 
 <p align="center">
   <strong>Point it at your movies. It writes the Arabic subtitles.</strong><br>
-  Fully offline EN→AR subtitles on Android — the engine runs <em>inside the app</em>.
-  No cloud, no account, no tracking, no Termux.
+  Runs on-device — the engine lives <em>inside the app</em>.
+  No accounts, no paid services, no Termux.
 </p>
 
 <p align="center">
   <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest"><img src="https://img.shields.io/github/v/release/muxd22-alt/arabic_subtitles?color=E5A93C&label=APK" alt="APK" /></a>
   <img src="https://img.shields.io/badge/Android-9.0%2B-arm64-blue" alt="Android" />
-  <img src="https://img.shields.io/badge/privacy-100%25%20on--device-success" alt="Privacy" />
+  <img src="https://img.shields.io/badge/translation-100%25%20on--device-success" alt="On-device" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="License" /></a>
 </p>
 
@@ -35,7 +35,7 @@ your phone.**
 | **1** | **Install** | Install the [latest APK](https://github.com/muxd22-alt/arabic_subtitles/releases/latest). It is sideloaded — there is no Play Store listing. |
 | **2** | **Grant & pick** | Allow **all-files access**, then open the **gear icon → الإعدادات** and tap **«إضافة مجلد أفلام / مسلسلات»** to pick your Movies / TV folder (e.g. `/sdcard/Movies`). |
 | **3** | **Download the models** | Tap **نزّل النموذج**. This also installs/repairs the bundled engine, then downloads the translation + speech models **once** into `<your folder>/ArabicSubs/models/` (~1.2 GB, resumable). |
-| **4** | **Run** | Tap **تشغيل الكل** to work through the whole queue, or **▶ ترجمة** on one row to translate a single file. |
+| **4** | **Run** | Tap **تشغيل الكل** to work through the whole queue, or **▶ ترجمة** on one row to translate a single file. The engine looks for a subtitle that already exists — next to the video, inside the container, then on free providers — and only transcribes the audio when there is none. |
 
 The first launch walks you through steps 1–3 with a short wizard. On later runs
 you only touch the dashboard. A **تنظيف وفحص** button clears skipped items and
@@ -95,12 +95,14 @@ Movie.ArabicSubs.ar.ass
 | Feature | What it does |
 | :--- | :--- |
 | **On-device translation** | Tencent **Hy-MT2-1.8B** (Q4_K_M GGUF, ~1.06 GB) served by `llama-server`. |
-| **Speech transcription** | `whisper.cpp` (`base`) for videos with no subtitle track. |
-| **Smart source picking** | Existing subtitle → use it; English subtitle → translate; embedded track → extract then translate; otherwise transcribe the audio. |
+| **Subtitle bazaar** | Before transcribing anything it looks for a subtitle that already exists — next to the video, inside the container, then on eight **free** providers (gestdown, subf2m, yifysubtitles, supersubtitles, podnapisi, subdl, opensubtitles.com). Arabic found anywhere is branded as-is; other languages are translated. See [`docs/providers.md`](docs/providers.md). |
+| **Speech transcription** | `whisper.cpp` (`base`) — the last resort, only when no subtitle exists anywhere. |
+| **Smart source picking** | Existing subtitle → use it; embedded track → extract it; the bazaar → download it; otherwise transcribe the audio. |
+| **Provider health** | A provider that throws gets a doubling cooldown (1 → 60 min) and is skipped, not failed. `arabic-subs providers` prints the `Name / Status / Next Retry` table. |
 | **Queue or single file** | **تشغيل الكل** runs the library one film at a time; **▶ ترجمة** does just one. |
 | **Skip / unskip + reclean** | Exclude a video, then **تنظيف وفحص** to reset and re-scan. |
-| **Live status** | The dashboard observes the foreground service for the active stage and progress. |
-| **100% offline after setup** | The only network use is the one-time model download. |
+| **Live status** | The dashboard observes the foreground service for the active stage and progress, including `[Library] <folder>: 120 video(s) — 96 done, 24 new` on every scan. |
+| **On-device by default** | Translation and transcription never leave the device. The only other network use is the (optional, free, keyless) subtitle search and the one-time model download — `--no-providers` / `ARABIC_SUBS_PROVIDERS=0` turns the search off. |
 
 ## Command-line engine
 
@@ -110,7 +112,10 @@ Node 18+ is installed. This is separate from the APK and still fully supported:
 ```bash
 node bin/arabic-subs.js setup                              # download the models
 node bin/arabic-subs.js run --media /path/to/Movies        # the queue
+node bin/arabic-subs.js run --media /path/to/Movies --once # one full pass, then exit
 node bin/arabic-subs.js process "/path/to/Movies/Gladiator.mkv"  # one film
+node bin/arabic-subs.js fetch "/path/to/Movies/Gladiator.mkv"    # what the bazaar has
+node bin/arabic-subs.js providers                          # provider health table
 node bin/arabic-subs.js translate movie.srt --out movie.ar.ass   # one subtitle file
 node bin/arabic-subs.js transcribe movie.mkv --out movie.srt     # audio → English SRT
 node bin/arabic-subs.js scan /path/to/Movies               # what would happen
@@ -126,10 +131,14 @@ For every video, in this order — and it logs every decision to
 | :--: | :--- | :--- | :--- |
 | 1 | the Arabic subtitle already exists | skip (idempotent) | — |
 | 2 | an Arabic subtitle sits next to the video | brand it and save | — |
-| 3 | an English subtitle sits next to the video | translate the cues | loaded |
-| 4 | the video has an embedded subtitle track | extract, then translate | loaded |
-| 5 | no subtitles, but there is audio | transcribe with whisper, then translate | loaded |
-| 6 | neither | skip, with the reason logged | — |
+| 3 | any other subtitle sits next to the video | translate the cues | loaded |
+| 4 | the video has an embedded subtitle track | extract it, brand or translate | loaded |
+| 5 | a free provider has a subtitle (Arabic first, then EN/ES) | download, save it as a sidecar, brand or translate | loaded if not Arabic |
+| 6 | no subtitles anywhere, but there is audio | transcribe with whisper, then translate | loaded |
+| 7 | neither | skip, with the reason logged | — |
+
+The bazaar step is documented in detail — providers, ranking, health, sidecar
+names and how to add a free API key — in [`docs/providers.md`](docs/providers.md).
 
 The app works on one video at a time so the phone stays cool; inside a video,
 cues are batched and translated in parallel.
@@ -175,6 +184,13 @@ Set these as environment variables (or in a `.env` file) for the CLI engine:
 | `WHISPER_MODEL` | `base` | `tiny` / `base` / `small` |
 | `WHISPER_BEAM_SIZE` | `1` | `1` is greedy decoding (fast); `5` is beam search |
 | `LLAMA_SERVER_BIN` | auto | use your own `llama-server` |
+| `ARABIC_SUBS_PROVIDERS` | `1` | `0` turns the subtitle bazaar off (local sidecars + whisper only) |
+| `PROVIDER_LANGUAGES` | `ar,en,es` | languages to ask providers for, in order |
+| `PROVIDER_TIMEOUT_MS` | `15000` | per-provider search timeout |
+| `SUBDL_API_KEY`, `OPENSUBTITLES_API_KEY`, `OPENSUBTITLES_USERNAME`, `OPENSUBTITLES_PASSWORD` | — | optional **free** keys for the two key-based providers (everything else is keyless) |
+
+Copy [`.env.example`](.env.example) to `.env` to start from a template.
+`.env` is git-ignored.
 
 ## Requirements
 
@@ -200,12 +216,13 @@ current engine sources.
 **Engine / CLI** — needs Node 18+:
 
 ```bash
-npm test                    # 87 tests, fully offline
+npm test                    # 137 tests, fully offline
 node scripts/verify-engine-libs.mjs   # check the bundled arm64 libraries
+node scripts/provider-smoke.mjs       # live check of the subtitle providers (network)
 ```
 
 Layout: `bin/arabic-subs.js` (CLI), `src/` (engine, media, pipeline),
-`app/` (Android app + bundled engine).
+`src/providers/` (the bazaar), `app/` (Android app + bundled engine).
 
 ## License
 

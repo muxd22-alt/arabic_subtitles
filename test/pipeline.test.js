@@ -170,7 +170,7 @@ test('processVideo skips when there is no subtitle and audio is disabled', async
     const video = path.join(dir, 'bare.mkv');
     fs.writeFileSync(video, '');
 
-    const res = await processVideo(video, { audio: false, log: () => { } });
+    const res = await processVideo(video, { audio: false, providers: false, embedded: false, log: () => { } });
     assert.strictEqual(res.status, 'skipped');
     assert.strictEqual(res.reason, 'no-subtitle');
 });

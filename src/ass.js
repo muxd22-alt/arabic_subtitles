@@ -43,6 +43,37 @@ function dialogueLine(startMs, endMs, text) {
     return `Dialogue: 0,${msToAss(startMs)},${msToAss(endMs)},Default,,0,0,0,,${escapeAssText(text)}`;
 }
 
+function uuencodeFont(buffer) {
+    if (!buffer || buffer.length === 0) return '';
+    let out = '';
+    let lineLen = 0;
+    const len = buffer.length;
+    for (let i = 0; i < len; i += 3) {
+        const b0 = buffer[i];
+        const b1 = i + 1 < len ? buffer[i + 1] : 0;
+        const b2 = i + 2 < len ? buffer[i + 2] : 0;
+
+        const c0 = (b0 >> 2) + 33;
+        const c1 = (((b0 & 3) << 4) | (b1 >> 4)) + 33;
+        const c2 = (((b1 & 15) << 2) | (b2 >> 6)) + 33;
+        const c3 = (b2 & 63) + 33;
+
+        out += String.fromCharCode(c0, c1, c2, c3);
+        lineLen += 4;
+        if (lineLen >= 80) {
+            out += '\n';
+            lineLen = 0;
+        }
+    }
+    if (lineLen > 0) out += '\n';
+    return out;
+}
+
+function embedFont(fontName, fontBuffer) {
+    if (!fontBuffer || fontBuffer.length === 0) return '';
+    return `[Fonts]\nfontname: ${fontName}\n${uuencodeFont(fontBuffer)}`;
+}
+
 /**
  * Build an ASS/SSA subtitle document styled with the Thmanyah Sans typeface.
  * Mirrors `buildSRT`: the watermark cue is always the first event. Cues whose
@@ -59,12 +90,18 @@ function buildASS(cues, options = {}) {
         lines.push(dialogueLine(startMs, endMs, cue.text));
     }
 
-    return `${lines.join('\n')}\n`;
+    let out = `${lines.join('\n')}\n`;
+    if (options.embeddedFont && options.embeddedFont.name && options.embeddedFont.buffer) {
+        out += `\n${embedFont(options.embeddedFont.name, options.embeddedFont.buffer)}\n`;
+    }
+    return out;
 }
 
 module.exports = {
     buildASS,
     escapeAssText,
     msToAss,
-    STYLE_LINE
+    STYLE_LINE,
+    embedFont,
+    uuencodeFont
 };

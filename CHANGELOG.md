@@ -1,5 +1,52 @@
 # Changelog
 
+## 2.6.0 — the subtitle bazaar: real subtitles first, transcription last
+
+The engine now *shops* for a subtitle before it ever opens the audio. For every
+video it walks, in order: a sidecar next to the file (any language) → a track
+inside the container → **free providers on the web** → and only then whisper.
+Arabic found anywhere is branded as-is; any other language is translated; the
+model still never writes a subtitle that already exists somewhere.
+
+- **The bazaar (`src/providers/`).** Eight stalls, all free, no paid service:
+  `embeddedsubtitles` (the container itself), `gestdown` (series, keyless JSON),
+  `subf2m`, `yifysubtitles`, `supersubtitles` (feliratok.eu), `podnapisi`,
+  `subdl` and `opensubtitlescom` (the last two start working the moment their
+  **free** API keys are added to `.env`, and until then report
+  `Not configured` — they never count as failures).
+- **Fastest to hardest, language-aware.** Candidates are ranked *Arabic first*
+  (brand it — no model needed at all), then the source languages worth
+  translating (`PROVIDER_LANGUAGES`, default `ar,en,es`), then release-name
+  similarity and the provider's own signals. One file is downloaded at a time,
+  best candidate first, until something really parses as a subtitle.
+- **Provider health with real backoff** (`~/.arabic-subs/providers.json`). A
+  provider that throws sits out 1, 2, 4, 8 … up to 60 minutes, doubles on every
+  consecutive failure and resets on success — one dead website can no longer
+  slow every film in the library. `arabic-subs providers` prints the familiar
+  `Name | Status | Next Retry` table (`ConnectionError`, `Not configured`,
+  `Disabled`).
+- **Downloads become local knowledge.** Anything fetched or extracted is saved
+  next to the video as `Movie.<lang>.srt` (collision → `Movie.<lang>.<provider>.srt`),
+  exactly the name the existing scan already reads, so the very next run is
+  offline and the user can see and edit what was fetched.
+- **Legacy encodings.** Arabic subtitles from older mirrors are decoded as
+  Windows-1256 instead of being turned into mojibake, and Latin text as
+  Windows-1252, before any translation is attempted.
+- **Free IMDb lookup.** `yifysubtitles` (and the key-based APIs) are asked by
+  exact IMDb id resolved through IMDb's own public suggestion endpoint — no key,
+  no account — cached in `~/.arabic-subs/imdb-cache.json`.
+- **New commands.** `arabic-subs fetch <video> [--download] [--provider id]`
+  shows what every provider has for one film; `arabic-subs providers` shows the
+  health table; `scan --search` adds what the bazaar would offer; `run --once`
+  scans the folders, works through the queue and exits (`--no-providers`,
+  `--no-embedded` keep it offline).
+- **Library visibility while running.** `[Library] <folder>: 120 video(s) — 96
+  done, 24 new` on every scan, and a video that failed with no subtitles is
+  re-queued automatically when a subtitle sidecar appears next to it — no
+  restart needed.
+- Version is **2.6.0** across `package.json` (release tag `v2.6.0`),
+  `versionCode 19` / `versionName "2.6.0"`, the app badge and the landing page.
+
 ## 2.5.2 — transcription finishes, and says how far it got
 
 - **Fixed transcription timing out on every chunk.** `libwhisper-cli.so timed out

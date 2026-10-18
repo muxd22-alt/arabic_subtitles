@@ -175,6 +175,46 @@ const WHISPER_BEAM_SIZE = intEnv('WHISPER_BEAM_SIZE', 1);
 
 const VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.m4v', '.mov', '.webm', '.ts', '.m2ts'];
 
+// ── The subtitle bazaar ──────────────────────────────────────────────────────
+// Before the engine ever transcribes audio on-device, it shops for an existing
+// subtitle (any language — Arabic is branded as-is, everything else is
+// translated): local sidecars, then embedded tracks, then free providers.
+// Providers need no paid service; the key-based ones (subdl, opensubtitles.com)
+// are simply reported as "Not configured" until their free keys are supplied.
+function boolEnv(name, fallback) {
+    const raw = process.env[name];
+    if (raw === undefined || raw === '') return fallback;
+    return !/^(0|false|no|off)$/i.test(String(raw).trim());
+}
+
+const PROVIDERS_ENABLED = boolEnv('ARABIC_SUBS_PROVIDERS', boolEnv('SUB_FETCH', true));
+// Languages to ask providers for: the first is the goal (Arabic — brand it),
+// the rest are the source languages worth translating from.
+// (`SUB_FETCH_LANGS` is the older spelling — both work.)
+const PROVIDER_LANGUAGES = (process.env.PROVIDER_LANGUAGES || process.env.SUB_FETCH_LANGS || 'ar,en,es')
+    .split(',')
+    .map((code) => code.trim().toLowerCase())
+    .filter(Boolean);
+const PROVIDER_TIMEOUT_MS = intEnv('PROVIDER_TIMEOUT_MS', intEnv('SUB_FETCH_TIMEOUT_MS', 15000));
+const PROVIDER_MAX_TRIES = intEnv('PROVIDER_MAX_TRIES', intEnv('SUB_FETCH_MAX_TRIES', 6));
+const PROVIDER_EMBEDDED = boolEnv('PROVIDER_EMBEDDED', boolEnv('SUB_FETCH_EMBEDDED', true));
+const PROVIDER_RESOLVE_IMDB = boolEnv('PROVIDER_RESOLVE_IMDB', boolEnv('RESOLVE_IMDB', boolEnv('IMDB_RESOLVE', true)));
+// Optional free API keys: subdl.com and opensubtitles.com.
+const SUBDL_API_KEY = process.env.SUBDL_API_KEY || '';
+const OPENSUBTITLES_API_KEY = process.env.OPENSUBTITLES_API_KEY || '';
+const OPENSUBTITLES_USERNAME = process.env.OPENSUBTITLES_USERNAME || '';
+const OPENSUBTITLES_PASSWORD = process.env.OPENSUBTITLES_PASSWORD || '';
+
+const CONFIG_ALIASES = {
+    SUB_FETCH: 'ARABIC_SUBS_PROVIDERS',
+    SUB_FETCH_LANGS: 'PROVIDER_LANGUAGES',
+    SUB_FETCH_TIMEOUT_MS: 'PROVIDER_TIMEOUT_MS',
+    SUB_FETCH_MAX_TRIES: 'PROVIDER_MAX_TRIES',
+    SUB_FETCH_EMBEDDED: 'PROVIDER_EMBEDDED',
+    RESOLVE_IMDB: 'PROVIDER_RESOLVE_IMDB',
+    IMDB_RESOLVE: 'PROVIDER_RESOLVE_IMDB'
+};
+
 const OUTPUT_SUFFIX = '.ArabicSubs.ar.ass';
 // Outputs written before 2.4 were SRT. They are still recognised as "done" so an
 // upgrade never re-translates an existing library.
@@ -234,6 +274,24 @@ module.exports = {
     AUDIO_CONCURRENCY,
     WHISPER_BEAM_SIZE,
     VIDEO_EXTS,
+    PROVIDERS_ENABLED,
+    SUB_FETCH: PROVIDERS_ENABLED,
+    PROVIDER_LANGUAGES,
+    SUB_FETCH_LANGS: PROVIDER_LANGUAGES,
+    PROVIDER_TIMEOUT_MS,
+    SUB_FETCH_TIMEOUT_MS: PROVIDER_TIMEOUT_MS,
+    PROVIDER_MAX_TRIES,
+    SUB_FETCH_MAX_TRIES: PROVIDER_MAX_TRIES,
+    PROVIDER_EMBEDDED,
+    SUB_FETCH_EMBEDDED: PROVIDER_EMBEDDED,
+    PROVIDER_RESOLVE_IMDB,
+    RESOLVE_IMDB: PROVIDER_RESOLVE_IMDB,
+    IMDB_RESOLVE: PROVIDER_RESOLVE_IMDB,
+    CONFIG_ALIASES,
+    SUBDL_API_KEY,
+    OPENSUBTITLES_API_KEY,
+    OPENSUBTITLES_USERNAME,
+    OPENSUBTITLES_PASSWORD,
     OUTPUT_SUFFIX,
     LEGACY_OUTPUT_SUFFIX,
     BRANDED_NAME_MARKER,

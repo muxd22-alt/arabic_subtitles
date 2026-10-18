@@ -46,6 +46,19 @@ test('parseSRT returns [] for junk input', () => {
     assert.deepStrictEqual(parseSRT('<html><body>nope</body></html>'), []);
 });
 
+test('parseSRT strips ASS override tags and turns hard breaks into newlines', () => {
+    const cues = parseSRT('1\n00:00:01,000 --> 00:00:03,000\n{\\pos(192,230)}line one\\Nline two{\\b1}\\h!\n');
+    assert.strictEqual(cues.length, 1);
+    assert.strictEqual(cues[0].text, 'line one\nline two\u00a0!');
+    assert.ok(!cues[0].text.includes('{'));
+    assert.ok(!cues[0].text.includes('\\N'));
+});
+
+test('parseSRT drops \\N padding lines that only carry bidi marks', () => {
+    const cues = parseSRT('1\n00:00:01,000 --> 00:00:03,000\n\u202b\\N\u202bRTL text\u202c\\N\\N\n');
+    assert.strictEqual(cues[0].text, '\u202bRTL text\u202c');
+});
+
 test('buildSRT emits watermark first, then renumbered cues', () => {
     const out = buildSRT(parseSRT(SAMPLE));
     assert.ok(out.includes(WATERMARK_TEXT));

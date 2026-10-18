@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('./config.js');
-const { isDone } = require('./pipeline.js');
+const { isDone, listSubtitleSiblings } = require('./pipeline.js');
 
 function walkMedia(rootDir, options = {}) {
     const exts = options.videoExts || config.VIDEO_EXTS;
@@ -105,6 +105,35 @@ class JobQueue {
         return files.length;
     }
 
+    /**
+     * Put one failed video back at the front of the queue — used when its
+     * surroundings changed (a subtitle sidecar appeared, the file was replaced)
+     * after a previous failure, which is exactly the case the watcher exists for.
+     */
+    retry(filePath) {
+        const resolved = path.resolve(filePath);
+        if (this.done.has(resolved) || this.active.has(resolved) || this.queued.has(resolved)) return false;
+        this.failed.delete(resolved);
+        return this.enqueue(resolved, true);
+    }
+
+    isIdle() {
+        return this.inFlight === 0 && this.pending.length === 0;
+    }
+
+    /** Resolve once the queue has nothing left to do (used by `run --once`). */
+    whenIdle() {
+        if (this.isIdle()) return Promise.resolve();
+        return new Promise((resolve) => {
+            const off = this.onEvent(() => {
+                if (this.isIdle()) {
+                    off();
+                    resolve();
+                }
+            });
+        });
+    }
+
     status() {
         return {
             pending: this.pending.length,
@@ -149,25 +178,70 @@ class JobQueue {
 }
 
 /**
+ * A cheap fingerprint of everything the pipeline reads *around* a video: its
+ * subtitle sidecars. When a file failed because it had no subtitles, dropping a
+ * `.srt` next to it changes this signature and the watcher gives the video a
+ * second chance without waiting for a restart.
+ */
+function subtitleSignature(videoPath) {
+    try {
+        return listSubtitleSiblings(videoPath).map((file) => {
+            try {
+                const stat = fs.statSync(file);
+                return `${path.basename(file)}:${stat.size}:${Math.round(stat.mtimeMs)}`;
+            } catch (e) {
+                return `${path.basename(file)}:?`;
+            }
+        }).join('|');
+    } catch (e) {
+        return '';
+    }
+}
+
+/**
  * Watch a folder for new videos using a polling scan (reliable on Android
  * shared storage where inotify often does not fire).
  */
 function watchFolder(rootDir, queue, options = {}) {
     const intervalMs = options.intervalMs || 15000;
     const seen = new Set();
+    const signatures = new Map();
 
     const scan = () => {
         const files = walkMedia(rootDir, options);
         const fresh = [];
+        let done = 0;
+        let changed = 0;
+
         for (const file of files) {
             const resolved = path.resolve(file);
-            if (seen.has(resolved)) continue;
+            if (isDone(resolved)) {
+                done++;
+                seen.add(resolved);
+                continue;
+            }
+            if (seen.has(resolved)) {
+                // Already known — but if its sidecar set changed since the last
+                // look, a previously failed video deserves a retry now.
+                const signature = subtitleSignature(resolved);
+                if (signatures.has(resolved) && signatures.get(resolved) !== signature) {
+                    signatures.set(resolved, signature);
+                    if (queue.retry(resolved)) changed++;
+                }
+                continue;
+            }
             seen.add(resolved);
-            if (isDone(resolved)) continue;
+            signatures.set(resolved, subtitleSignature(resolved));
             fresh.push(resolved);
         }
+
         if (fresh.length > 0) queue.enqueueAll(fresh);
-        return fresh;
+        if (options.onScan) {
+            try {
+                options.onScan({ dir: rootDir, total: files.length, fresh: fresh.length, changed, done });
+            } catch (e) { }
+        }
+        return { fresh, changed, done, total: files.length };
     };
 
     scan();
@@ -180,4 +254,4 @@ function watchFolder(rootDir, queue, options = {}) {
     };
 }
 
-module.exports = { walkMedia, JobQueue, watchFolder };
+module.exports = { walkMedia, JobQueue, watchFolder, subtitleSignature };

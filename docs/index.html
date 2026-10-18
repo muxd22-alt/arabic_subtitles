@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>عربي سبس — ترجمة تلقائية بالكامل على هاتفك</title>
-  <meta name="description" content="عربي سبس: تطبيق أندرويد مكتفٍ بذاته. المحرك مدمج داخل التطبيق ويعمل على هاتفك دون إنترنت — يحوّل الترجمات الإنجليزية إلى عربية بنموذج Hy-MT2 ويستخرج الكلام عبر whisper.cpp، والناتج ملف ASS بخط Thmanyah Sans." />
+  <meta name="description" content="عربي سبس: تطبيق أندرويد مكتفٍ بذاته. المحرك مدمج داخل التطبيق، والترجمة والنسخ الصوتي يعملان على هاتفك دون إنترنت — يحوّل الترجمات إلى عربية بنموذج Hy-MT2 ويستخرج الكلام عبر whisper.cpp، ويبحث أولاً في مزوّدات ترجمة مجانية عند توفر الشبكة، والناتج ملف ASS بخط Thmanyah Sans." />
   <meta name="theme-color" content="#0a0e14">
 
   <link rel="icon" href="ArabicSubs.png">
@@ -129,9 +129,19 @@
       </div>
 
       <div class="feature-card">
+        <div class="feature-icon"><i class="material-icons">storefront</i></div>
+        <h3>سوق الترجمات المجاني</h3>
+        <p>قبل تفريغ الصوت، يبحث المحرك عن ترجمة موجودة: بجانب الفيديو، داخل الحاوية، ثم في مزوّدات مجانية بلا حساب (gestdown، subf2m، yifysubtitles، supersubtitles، podnapisi… والترجمة العربية الجاهزة تُختم مباشرة دون نموذج). أي مزوّد يتعطّل يدخل فترة انتظار تتصاعد تلقائياً بدل أن يعطّل المكتبة.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><i class="material-icons">health_and_safety</i></div>
+        <h3>صحة المزوّدين مع إعادة المحاولة</h3>
+        <p>جدول حالة لكل مصدر (Name / Status / Next Retry): يعمل، خطأ اتصال، أو غير مهيّأ. الفشل المتكرر يضاعف مدة الانتظار (1 ← 60 دقيقة) وينسى نفسه بعد النجاح — تماماً كما اعتدت في Bazarr.</p>
+      </div>
+      <div class="feature-card">
         <div class="feature-icon"><i class="material-icons">mic</i></div>
         <h3>استخراج الصوت الذكي</h3>
-        <p>إذا لم يتوفر أي ملف ترجمة، يستخرج الصوت عبر ffmpeg ويُفك عبر whisper.cpp ثم يُترجم بسلاسة.</p>
+        <p>آخر حل فقط: إذا لم يوجد أي ملف ترجمة في أي مكان، يستخرج الصوت عبر ffmpeg ويُفك عبر whisper.cpp ثم يُترجم بسلاسة.</p>
       </div>
 
       <div class="feature-card">
@@ -174,10 +184,11 @@
     <div class="pipeline-steps">
       <div class="step"><i class="material-icons">check_circle</i> <span>1. الملف المترجم موجود مسبقاً (.ArabicSubs.ar.ass) ← تخطٍّ فوري لتوفير الوقت</span></div>
       <div class="step"><i class="material-icons">branding_watermark</i> <span>2. ترجمة عربية جاهزة بجانب الفيديو (.ar.srt) ← وضع العلامة المائية والحفظ</span></div>
-      <div class="step"><i class="material-icons">translate</i> <span>3. ترجمة إنجليزية بجانب الفيديو (.en.srt) ← تجزئتها وترجمتها عبر Hy-MT2</span></div>
+      <div class="step"><i class="material-icons">translate</i> <span>3. أي ترجمة أخرى بجانب الفيديو (.en.srt، .es.srt…) ← ترجمتها عبر Hy-MT2</span></div>
       <div class="step"><i class="material-icons">video_library</i> <span>4. مسار ترجمة مدمج داخل الحاوية (MKV / MP4) ← استخراجه ثم ترجمته</span></div>
-      <div class="step"><i class="material-icons">graphic_eq</i> <span>5. لا توجد ترجمة ← تقطيع الصوت لمقاطع 5 دقائق ← تفريغ whisper ← ترجمة</span></div>
-      <div class="step"><i class="material-icons">skip_next</i> <span>6. لا يوجد صوت ولا ترجمة ← تسجيل التشخيص والتخطي بأمان</span></div>
+      <div class="step"><i class="material-icons">storefront</i> <span>5. سوق الترجمات المجاني (gestdown، subf2m، yifysubtitles، supersubtitles، podnapisi، subdl، opensubtitles.com) ← تنزيل وحفظ ثم ترجمة — العربية الجاهزة تُختم دون نموذج</span></div>
+      <div class="step"><i class="material-icons">graphic_eq</i> <span>6. لا توجد ترجمة ← تقطيع الصوت لمقاطع 5 دقائق ← تفريغ whisper ← ترجمة</span></div>
+      <div class="step"><i class="material-icons">skip_next</i> <span>7. لا يوجد صوت ولا ترجمة ← تسجيل التشخيص والتخطي بأمان</span></div>
     </div>
 
     <div class="term">
@@ -232,7 +243,7 @@
 
     <div class="apk-card">
       <div class="meta">
-        <h3>تطبيق عربي سبس Android <span class="chip">v2.5.2</span></h3>
+        <h3>تطبيق عربي سبس Android <span class="chip">v2.6.0</span></h3>
         <p>واجهة عربية RTL بهوية ذهبية: إدارة قائمة الانتظار، اختيار المجلدات، وتنزيل النماذج — والمحرك يعمل داخل التطبيق مع متابعة الحالة مباشرةً.</p>
       </div>
       <a href="https://github.com/muxd22-alt/arabic_subtitles/releases/latest" class="btn btn-gold"><i class="material-icons">download</i> تنزيل APK</a>
