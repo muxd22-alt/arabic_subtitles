@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node bin/arabic-subs.js run --media /sdcard/Movies",
     "setup": "node bin/arabic-subs.js setup",
-    "test": "node --test"
+    "test": "node --test",
+    "verify:engine": "node scripts/verify-engine-libs.mjs"
   },
   "engines": {
     "node": ">=18"

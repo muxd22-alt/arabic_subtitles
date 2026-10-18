@@ -1,54 +1,51 @@
-# Arabic Subs Android Companion App 📱
+# Arabic Subs Android App 📱
 
 <p align="center">
   <img src="../docs/ArabicSubs.png" alt="عربي سبس Logo" width="120" />
 </p>
 
-The official native Android companion app for **Arabic Subs (عربي سبس)**. Built with **Modern Jetpack Compose**, **Material 3**, and Android's **Storage Access Framework (SAF)**.
+The official native Android app for **Arabic Subs (عربي سبس)**. Built with **Modern Jetpack Compose**, **Material 3**, and a **foreground service** that runs the bundled engine on-device.
 
 ---
 
 ## 🎯 Purpose & Architecture
 
-The Android app acts as the user-facing command bridge for the on-device translation engine running inside **Termux**:
+The app **is** the runner: it carries its own Node engine and native tools inside the APK and executes them itself — there is no Termux and no clipboard step.
 
-1. **Folder Selection & Permission Persistence:** Uses `ACTION_OPEN_DOCUMENT_TREE` to grant read/write access to media directories across reboots.
-2. **Three-Step Setup Wizard:** Step-by-step guidance for Termux package installation, folder selection, and launching.
-3. **Queue-Style & Specific File Operations:**
-   - **تشغيل الكل (Run All):** Dispatches the entire queue of pending media files to Termux.
-   - **نسخ الأمر (Copy Command):** Instantly copies the full run command to the clipboard with one tap.
-   - **تنظيف وفحص (Reclean & Rescan):** Clears skipped statuses, re-verifies `.ArabicSubs.ar.srt` sidecars on disk, and synchronizes the queue.
-   - **Single Item Controls:** Every video card offers a direct **Copy Command** and **Play** button to translate just that individual file.
-   - **Skip / Unskip:** Skip any video so the engine bypasses it during batch operations.
-4. **Live Engine Status:** Background coroutine polls `http://127.0.0.1:18435/status` on loopback to display active video name, cue progress, and queue statistics in real time.
-5. **Seamless IPC:** Sends execution intents via `com.termux.RUN_COMMAND` with an automatic fallback that copies the command and opens Termux if the intent service is unavailable.
+1. **All-files access:** the engine needs real filesystem paths to read videos and write `.srt` files beside them, so the app requests `MANAGE_EXTERNAL_STORAGE` (sideloaded app, primary storage).
+2. **Three-step first run:** allow access → choose media folder(s) → download the models once into `<media>/ArabicSubs/`.
+3. **The engine runs in-app:** an `android.app.Service` (`EngineService`) unpacks the bundled tools, sets up the environment, spawns the Node engine and streams its output.
+4. **Live status:** the dashboard observes `EngineService.status` (a `StateFlow`) for the active stage and progress — no loopback server.
+5. **Queue-style & single-file runs:**
+   - **تشغيل الكل (Run All):** runs the whole pending queue, one film at a time.
+   - **▶ ترجمة (Translate):** run just one file.
+   - **تنظيف وفحص (Reclean & Rescan):** clears skipped statuses, re-verifies the `.ArabicSubs.ar.srt` sidecars on disk, and syncs the queue.
+   - **Skip / Unskip:** skip a video so batch runs bypass it.
 
 ---
 
 ## 📱 Three-Step User Workflow
 
-The app is built around the **Three Clear Steps** paradigm:
-
 ```
 ┌─────────────────────────────────┐
-│ Step 1: One-Liner in Termux     │ ──> Copy & run single setup command
+│ Step 1: Allow file access       │ ──> Settings → allow all files
 ├─────────────────────────────────┤
-│ Step 2: Choose Media Folder     │ ──> Pick /sdcard/Movies or TV Shows
+│ Step 2: Choose media folder     │ ──> Pick /sdcard/Movies or TV Shows
 ├─────────────────────────────────┤
-│ Step 3: Run Engine / Copy & Go  │ ──> Queue all or pick specific video
+│ Step 3: Download the model      │ ──> ~1.1 GB, once, into <media>/ArabicSubs/
 └─────────────────────────────────┘
 ```
 
 ### Dashboard Actions
 
-- **🚀 تشغيل الكل (Run All):** Executes `node bin/arabic-subs.js run --media ...` in Termux.
-- **📋 نسخ الأمر (Copy Command):** Copies the exact CLI command to your clipboard.
-- **🧹 تنظيف وفحص (Reclean & Rescan):** Resets skipped items, cleans the list, and triggers a full rescan.
+- **🚀 تشغيل الكل (Run All):** starts the engine over the queued folders.
+- **🧹 تنظيف وفحص (Reclean & Rescan):** resets skipped items, cleans the list, and triggers a full rescan.
 - **Per-Item Row:**
   - Status indicator: **Done ✅ (جاهز)**, **Pending ⏳ (بانتظار الترجمة)**, **Skipped ⏭️ (متخطى)**.
-  - **نسخ (Copy):** Copies `node bin/arabic-subs.js process "/path/to/movie.mp4"` for that specific file.
-  - **▶️ (Play):** Launches Termux directly targeting that specific video.
-  - **⏭️ (Skip / Unskip):** Toggles inclusion in the batch queue.
+  - **▶️ (Translate):** runs just that video through the engine.
+  - **⏭️ (Skip / Unskip):** toggles inclusion in the batch queue.
+- **1–4 selector:** sizes the in-video translation parallelism and the llama `-np`
+  slot pool (the engine always works on **one video at a time**).
 
 ---
 
@@ -58,14 +55,16 @@ The app is built around the **Three Clear Steps** paradigm:
 app/
 ├── build.gradle.kts           # SDK 35, Min SDK 26, Compose BOM, arm64-v8a ABI filter
 ├── src/main/
-│   ├── AndroidManifest.xml   # Permissions (INTERNET, RUN_COMMAND, STORAGE)
+│   ├── AndroidManifest.xml    # Permissions (storage, foreground service), the engine service
 │   ├── java/com/arabicsubs/
-│   │   ├── ArabicSubsApp.kt   # Application entry point
+│   │   ├── ArabicSubsApp.kt    # Application entry point
+│   │   ├── engine/             # Paths, assets unpack, env, argv, output parsing, EngineService
+│   │   ├── storage/            # All-files-access helpers
 │   │   └── ui/
-│   │       ├── MainActivity.kt # Core dashboard, media scanner, SAF persistence, IPC
-│   │       ├── SetupWizard.kt  # 3-Step Setup Wizard dialog & clipboard helper
-│   │       └── theme/         # AMOLED dark theme tokens & typography
-│   └── res/                   # Drawables, mipmaps, strings, and icons
+│   │       ├── MainActivity.kt # Dashboard, media scanner, service wiring
+│   │       ├── SetupWizard.kt  # 3-step first-run wizard
+│   │       └── theme/          # AMOLED dark theme tokens & typography
+│   └── res/                    # Drawables, mipmaps, strings, and icons
 ```
 
 ---
@@ -98,5 +97,8 @@ app/build/outputs/apk/release/app-release.apk
 
 ## 🔒 Security & Privacy
 
-- **100% Offline:** The app only connects to `http://127.0.0.1:18435` (localhost loopback) to fetch engine statistics. No internet traffic, analytics, or external calls are ever made.
-- **Scoped Storage:** Operates strictly within user-granted directories through Android's Storage Access Framework.
+- **100% Offline once set up:** the only network traffic is the one-time model
+  download from GitHub; after that the engine runs entirely on-device. No
+  analytics and no external calls.
+- **All-files access is required** because the engine reads and writes real files
+  next to your videos; nothing is uploaded anywhere.

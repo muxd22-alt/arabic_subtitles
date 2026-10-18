@@ -27,8 +27,16 @@ jobs:
       with:
         gradle-version: 8.7
 
+    - name: Verify bundled engine libs
+      run: node scripts/verify-engine-libs.mjs
+
     - name: Build with Gradle
       run: gradle assembleDebug testDebugUnitTest
+
+    - name: Assert APK carries the engine
+      run: |
+        unzip -l app/build/outputs/apk/debug/app-debug.apk \
+          | grep -E 'lib/arm64-v8a/lib(llama-server|whisper-cli|ffmpeg|ffprobe)\.so'
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
