@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('./config.js');
-const { parseSRT, normalizeToUtf8, looksArabic, validateSRT, probeDurationMs } = require('./srt.js');
+const { parseSRT, normalizeToUtf8, looksArabic, validateSRT } = require('./srt.js');
+const audio = require('./audio.js');
 const { logDecision } = require('./decision-log.js');
 const { translateTexts } = require('./translate.js');
 
@@ -139,12 +140,17 @@ async function processVideo(videoPath, options = {}) {
     const server = options.server || null;
     const log = options.log || logDecision;
     const useAudio = options.audio !== false;
-    const durationMs = options.durationMs !== undefined ? options.durationMs : probeDurationMs(videoPath);
 
     if (isDone(videoPath)) {
         log({ file: videoPath, action: 'skip', reason: 'existing-output' });
         return { status: 'skipped', reason: 'existing-output' };
     }
+
+    // Probed lazily (and asynchronously) so files that are already done are never
+    // probed and a stuck ffprobe can never block the whole engine.
+    let durationMs = options.durationMs !== undefined && options.durationMs !== null
+        ? options.durationMs
+        : await audio.probeDurationMs(videoPath);
 
     const source = findSubtitleSource(videoPath);
 
@@ -168,7 +174,8 @@ async function processVideo(videoPath, options = {}) {
             options.onStage && options.onStage({ stage: 'transcribe' });
             cues = await asr.transcribeMedia(videoPath, {
                 onProgress: options.onProgress,
-                durationMs
+                durationMs,
+                onDuration: (ms) => { durationMs = ms; }
             });
             origin = 'audio';
             if (cues.length === 0) {

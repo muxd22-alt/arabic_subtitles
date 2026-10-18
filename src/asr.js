@@ -80,19 +80,43 @@ function mergeChunkCues(chunk, cues, chunks, isLast) {
 /**
  * Full "sound → English cues" path: probe duration, split the timeline into
  * chunks, extract + transcribe them with a bounded pool, merge, sort.
+ * When the duration cannot be probed (unusual container, container metadata
+ * still missing, an ffprobe that refuses the file) we do NOT fail: the whole
+ * audio track is extracted in one pass and transcribed as a single chunk.
  * Returns an array of cues with absolute timestamps.
  */
 async function transcribeMedia(mediaPath, options = {}) {
     const concurrency = options.concurrency || config.AUDIO_CONCURRENCY;
     const onProgress = options.onProgress || (() => { });
+    const log = options.log || ((line) => console.error(line));
     const tmpDir = options.tmpDir || path.join(config.TMP_DIR, `asr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
 
-    const durationMs = options.durationMs || await audio.probeDurationMs(mediaPath);
-    if (!durationMs) {
-        throw new Error(`could not probe duration of ${mediaPath} (is ffprobe installed?)`);
+    if (!fs.existsSync(mediaPath)) {
+        throw new Error(`media file not found: ${mediaPath}`);
+    }
+    try {
+        fs.accessSync(mediaPath, fs.constants.R_OK);
+    } catch (e) {
+        throw new Error(`media file is not readable: ${mediaPath} — grant the app "All files access" (الإعدادات → الوصول إلى الملفات)`);
     }
 
-    const chunks = audio.planChunks(durationMs, options.chunkMs || config.CHUNK_MS, config.CHUNK_OVERLAP_MS);
+    let durationMs = options.durationMs || null;
+    if (!durationMs) {
+        const probe = await audio.probeDurationDetailed(mediaPath);
+        durationMs = probe.ms;
+        if (!durationMs) {
+            log(`[ASR] could not read a duration for ${path.basename(mediaPath)}: ${probe.error}`);
+            log('[ASR] falling back to a single-pass transcription of the whole file');
+        }
+    }
+    if (typeof options.onDuration === 'function') options.onDuration(durationMs || null);
+
+    // Unknown duration → cannot chunk → one chunk covering the whole track.
+    const wholeFile = !durationMs;
+    const chunks = wholeFile
+        ? [{ index: 0, startMs: 0, endMs: null }]
+        : audio.planChunks(durationMs, options.chunkMs || config.CHUNK_MS, config.CHUNK_OVERLAP_MS);
+
     const extracted = await audio.extractChunks(mediaPath, chunks, tmpDir, {
         concurrency,
         onProgress: (done, total) => onProgress({ stage: 'extract', done, total })
@@ -101,6 +125,14 @@ async function transcribeMedia(mediaPath, options = {}) {
     const threads = options.threads || threadsPerChunk(options, concurrency);
     const results = new Array(extracted.length).fill(null);
     let cursor = 0;
+
+    // A slow phone can take several times realtime to transcribe, so allow the
+    // process at least three times the audio length it was handed (plus slack)
+    // before giving up on it.
+    function timeoutFor(chunk) {
+        const mediaMs = chunk.endMs == null ? 4 * 3600000 : (chunk.endMs - chunk.startMs);
+        return Math.max(options.timeoutMs || 900000, mediaMs * 3 + 300000);
+    }
 
     async function worker() {
         while (cursor < extracted.length) {
@@ -113,8 +145,10 @@ async function transcribeMedia(mediaPath, options = {}) {
                 done: results.filter(Boolean).length,
                 total: extracted.length
             });
-            const cues = await transcribeChunk(wavPath, { ...options, threads });
-            results[i] = mergeChunkCues(chunk, cues, chunks, i === extracted.length - 1);
+            const cues = await transcribeChunk(wavPath, { ...options, threads, timeoutMs: timeoutFor(chunk) });
+            results[i] = wholeFile
+                ? cues.map((cue) => ({ index: null, start: cue.start, end: cue.end, text: cue.text }))
+                : mergeChunkCues(chunk, cues, chunks, i === extracted.length - 1);
             onProgress({
                 stage: 'transcribe',
                 phase: 'done',
